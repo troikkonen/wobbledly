@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Wobbledly</title>
+<meta name="description" content="Wobbledly is a squishy merge game. Drop soft jelly blobs, fuse matching pairs, and reach each level's goal before the tank overflows. Runs in your browser on WebGPU.">
+<meta name="theme-color" content="#e3ebe9">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Wobbledly">
+<meta property="og:description" content="Wobbledly is a squishy merge game. Drop soft jelly blobs, fuse matching pairs, and reach each level's goal before the tank overflows. Runs in your browser on WebGPU.">
+<meta property="og:url" content="https://wobbledly.netlify.app/">
+<meta property="og:image" content="https://wobbledly.netlify.app/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.36' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23ffd0de'/%3E%3Cstop offset='.45' stop-color='%23ff2463'/%3E%3Cstop offset='1' stop-color='%23a8103f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cellipse cx='32' cy='34' rx='28' ry='25' fill='url(%23g)'/%3E%3Cellipse cx='23' cy='22' rx='7' ry='4.5' fill='%23fff' opacity='.8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600&family=Fredoka:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: full-bleed WebGPU stage; wordmark and action pills float on top, material + shape tray docks at the bottom */
+  --ink:#17282c;
+  --paper:#e3ebe9;
+  --glass:rgba(255,255,255,.66);
+  --line:rgba(23,40,44,.13);
+  --muted:#587075;
+  --accent:#ff3d6e;
+  --font-display:'Fredoka','Trebuchet MS',system-ui,sans-serif;
+  --font-body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+:root.night{
+  --ink:#e9f3f1;
+  --paper:#0c1417;
+  --glass:rgba(20,32,36,.66);
+  --line:rgba(233,243,241,.16);
+  --muted:#8fa5a8;
+  --accent:#ff5c85;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--font-body);-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{position:fixed;top:12px;left:16px;right:16px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;pointer-events:none}
+.brand{display:flex;flex-direction:column;gap:1px;order:1}
+.side{order:2;margin-left:auto;display:flex;gap:6px;align-items:center;pointer-events:auto}
+:root:not(.game) .play{display:none !important}
+:root.game .sand{display:none !important}
+.scoreline b{font-family:var(--font-display);font-weight:600;font-size:20px;color:var(--ink)}
+.brand p.scoreline{font-size:13px}
+.next{height:40px;padding:0 7px 0 10px;border-radius:20px;background:var(--glass);border:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--muted);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.next i{display:block;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.ladder{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px}
+.ladder i{display:block;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.18);flex:none}
+.ladder i.off{display:none}
+.ladder i.goal{outline:2px solid var(--accent);outline-offset:2px}
+.over .note{font-size:13px}
+.over .note i{display:inline-block;vertical-align:-4px;width:18px;height:18px;border-radius:50%;margin:0 3px}
+.linkbtn{font-size:13px;font-weight:600;color:var(--muted);text-decoration:underline;padding:4px 8px}
+.linkbtn[hidden]{display:none}
+.line{position:fixed;left:0;top:0;height:0;transform-origin:0 50%;pointer-events:none}
+#aim{border-top:2px dashed var(--ink);opacity:.26}
+#danger{border-top:2px dashed var(--accent);opacity:.5}
+#danger.hot{opacity:1;animation:blink .45s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+.pop{position:fixed;font-family:var(--font-display);font-weight:600;font-size:24px;color:var(--ink);text-shadow:0 1px 0 var(--paper),0 0 10px var(--paper);pointer-events:none;transform:translate(-50%,-50%);animation:rise .9s ease-out forwards}
+@keyframes rise{from{opacity:1;transform:translate(-50%,-50%) scale(.7)}18%{transform:translate(-50%,-80%) scale(1.15)}to{opacity:0;transform:translate(-50%,-210%) scale(1)}}
+.over{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;pointer-events:none}
+.over[hidden]{display:none}
+.over>div{pointer-events:auto;min-width:240px;padding:22px 24px;border-radius:24px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.over h2{margin:0;font-family:var(--font-display);font-weight:600;font-size:24px}
+.over p{margin:0;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.over p b{font-family:var(--font-display);font-size:22px;color:var(--ink)}
+.over .pill{height:40px;padding:0 20px;border-radius:20px;font-size:15px}
+@media (prefers-reduced-motion:reduce){#danger.hot{animation:none}.pop{animation-duration:.5s}}
+.brand h1{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:.2px;line-height:1.05}
+.brand p{margin:0;font-size:12px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.acts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;pointer-events:auto;order:3;flex-basis:100%}
+.pill{height:32px;padding:0 12px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .12s ease,background .2s}
+.pill:active{transform:scale(.94)}
+.pill b{font-weight:600;color:var(--accent)}
+.pill[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:transparent}
+.pill.boom{background:var(--accent);color:#fff;border-color:transparent}
+
+.tray{position:fixed;left:12px;right:12px;bottom:12px;margin:0 auto;max-width:460px;padding:8px 12px 10px;border-radius:24px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:8px}
+.hint{margin:0;font-size:12px;font-weight:500;color:var(--muted);text-align:center;text-wrap:balance}
+.row{display:flex;gap:6px}
+.mat{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--muted);min-width:0}
+.mat i{width:34px;height:34px;border-radius:50%;display:block;box-shadow:0 2px 6px rgba(0,0,0,.18),inset 0 -6px 10px rgba(0,0,0,.14);outline:2px solid transparent;outline-offset:2px;transition:transform .15s ease,outline-color .15s}
+.mat[aria-pressed="true"]{color:var(--ink)}
+.mat[aria-pressed="true"] i{outline-color:var(--accent);transform:scale(1.06)}
+.m-jelly i{background:radial-gradient(circle at 34% 28%,#fff 0 7%,#ff9ab4 12%,#ff2d6f 46%,#b3003f 100%)}
+.m-rubber i{background:repeating-linear-gradient(115deg,#12b5a6 0 9px,#f4f1e6 9px 15px)}
+.m-chrome i{background:linear-gradient(175deg,#fdfdfd 0%,#9fb1b8 34%,#39474d 52%,#c9d4d8 60%,#f4f6f6 100%)}
+.m-pearl i{background:radial-gradient(circle at 34% 28%,#fff 0 12%,#ffe3f1 30%,#d6ecff 58%,#e8dcff 78%,#bfc7d6 100%)}
+.m-glow i{background:radial-gradient(circle at 50% 50%,#eaffff 0 14%,#2ff3ff 48%,#0aa3c2 100%);box-shadow:0 0 12px rgba(47,243,255,.75)}
+.m-mallow i{background:radial-gradient(circle at 36% 30%,#fff5f8 0 22%,#ffc9d9 70%,#eaa9bf 100%)}
+.shape{flex:1;height:42px;border-radius:14px;border:1px solid var(--line);background:rgba(127,150,150,.12);display:flex;align-items:center;justify-content:center;transition:transform .12s ease,background .15s}
+.shape:active{transform:scale(.92);background:rgba(127,150,150,.26)}
+.shape svg{width:26px;height:26px;fill:currentColor}
+.shape svg .hole{fill:none;stroke:currentColor;stroke-width:7}
+
+.fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:var(--paper)}
+.fail div{max-width:420px;text-align:center}
+.fail h2{font-family:var(--font-display);font-weight:600;font-size:24px;margin:0 0 8px}
+.fail p{margin:0;font-size:15px;line-height:1.5;color:var(--muted)}
+.nogpu .fail{display:flex}
+.nogpu .tray,.nogpu .acts{display:none}
+@media (min-width:700px){.brand h1{font-size:26px}.acts{order:2;flex-basis:auto;margin-left:auto}.side{order:3;margin-left:0}}
+@media (max-height:520px){.hint{display:none}.tray{padding:8px 10px;gap:6px}.mat i{width:30px;height:30px}.shape{height:38px}}
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="-1" aria-label="Soft body physics stage. In the game, drag to aim and let go to drop a blob. In the sandbox, drag blobs to fling them."></canvas>
+
+<div class="line play" id="danger"></div>
+<div class="line play" id="aim"></div>
+<div id="pops" aria-hidden="true"></div>
+
+<header class="top">
+  <div class="brand">
+    <h1 id="title">Wobbledly</h1>
+    <p id="count" class="sand">0 of 40 blobs</p>
+    <p class="play scoreline"><b id="score">0</b> pts · best <span id="best">0</span></p>
+  </div>
+  <div class="acts">
+    <button class="pill boom sand" id="btnBoom" type="button">Boom</button>
+    <button class="pill sand" id="btnGrav" type="button">Gravity <b id="gravState">down</b></button>
+    <button class="pill sand" id="btnSlow" type="button" aria-pressed="false">Slow</button>
+    <button class="pill play" id="btnRestart" type="button">Restart</button>
+    <button class="pill play" id="btnSound" type="button" aria-pressed="true">Sound</button>
+    <button class="pill" id="btnMusic" type="button" aria-pressed="true">Music</button>
+    <button class="pill" id="btnNight" type="button" aria-pressed="false">Night</button>
+    <button class="pill play" id="btnSandbox" type="button">Sandbox</button>
+  </div>
+  <div class="side">
+    <button class="pill boom sand" id="btnPlay" type="button">Play game</button>
+    <button class="pill sand" id="btnClear" type="button">Clear</button>
+    <div class="next play"><span>Goal</span><i id="goalSw"></i></div>
+    <div class="next play"><span>Next</span><i id="nextSw"></i></div>
+  </div>
+</header>
+
+<section class="tray" aria-label="Controls">
+  <p class="hint play" id="gameHint">Drag to aim, let go to drop. Merge up to the ringed blob.</p>
+  <div class="ladder play" id="ladder" aria-hidden="true"></div>
+  <p class="hint sand">Tap a shape to drop it in. Drag blobs to fling them.</p>
+  <div class="row sand" id="mats" role="group" aria-label="Material">
+    <button class="mat m-jelly" type="button" data-m="0" aria-pressed="true"><i></i>Jelly</button>
+    <button class="mat m-rubber" type="button" data-m="1" aria-pressed="false"><i></i>Rubber</button>
+    <button class="mat m-chrome" type="button" data-m="2" aria-pressed="false"><i></i>Chrome</button>
+    <button class="mat m-pearl" type="button" data-m="3" aria-pressed="false"><i></i>Pearl</button>
+    <button class="mat m-glow" type="button" data-m="4" aria-pressed="false"><i></i>Glow</button>
+    <button class="mat m-mallow" type="button" data-m="5" aria-pressed="false"><i></i>Mallow</button>
+  </div>
+  <div class="row sand" id="shapes" role="group" aria-label="Shape">
+    <button class="shape" type="button" data-s="0" aria-label="Drop a ball"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15"/></svg></button>
+    <button class="shape" type="button" data-s="1" aria-label="Drop a cube"><svg viewBox="0 0 40 40"><rect x="6" y="6" width="28" height="28" rx="9"/></svg></button>
+    <button class="shape" type="button" data-s="2" aria-label="Drop a donut"><svg viewBox="0 0 40 40"><circle class="hole" cx="20" cy="20" r="11.5"/></svg></button>
+    <button class="shape" type="button" data-s="3" aria-label="Drop a pill"><svg viewBox="0 0 40 40"><rect x="11" y="3" width="18" height="34" rx="9"/></svg></button>
+    <button class="shape" type="button" data-s="4" aria-label="Drop a puck"><svg viewBox="0 0 40 40"><rect x="3" y="11" width="34" height="18" rx="7"/></svg></button>
+  </div>
+</section>
+
+<div class="over" id="over" role="dialog" aria-labelledby="overT" hidden>
+  <div>
+    <h2 id="overT">The tank overflowed</h2>
+    <p><b id="overScore">0</b> pts · best <span id="overBest">0</span></p>
+    <p class="note" id="overNote"></p>
+    <button class="pill boom" id="btnAgain" type="button">Try again</button>
+    <button class="linkbtn" id="btnAlt" type="button" hidden>Back to level 1</button>
+  </div>
+</div>
+
+<div class="fail" role="alert"><div><h2>Wobbledly needs WebGPU</h2><p id="failMsg">Open this page in a current Chrome or Edge (Android 12 or newer, or desktop), or Safari 26 or newer.</p></div></div>
+
+<script>
+(async function(){
+'use strict';
+const VPB = 640, MAXB = 40, FLOOR_Y = 0.012;
+const canvas = document.getElementById('gl');
+const root = document.documentElement;
+function fail(msg){ root.classList.add('nogpu'); if(msg) document.getElementById('failMsg').textContent = msg; }
+
+if(!navigator.gpu){ fail(); return; }
+let adapter=null, device=null;
+try{
+  adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  if(adapter) device = await adapter.requestDevice();
+}catch(e){ console.error(e); }
+if(!device){ fail('WebGPU is present but no graphics adapter was available. Try updating your browser or graphics driver.'); return; }
+device.addEventListener('uncapturederror', e => console.error('GPU error: ' + (e.error && e.error.message)));
+let lostMsg='';
+device.lost.then(info => { lostMsg=info.reason+': '+info.message; console.error('LOST '+lostMsg); if(info.reason !== 'destroyed') fail('The graphics device was lost. Reload the page to start again.'); });
+const TEST = !!window.__TEST;   // headless test mode: draw offscreen, copy into a 2D canvas
+const ctx = TEST ? null : canvas.getContext('webgpu');
+const ctx2d = TEST ? canvas.getContext('2d') : null;
+const format = TEST ? 'rgba8unorm' : navigator.gpu.getPreferredCanvasFormat();
+if(ctx) ctx.configure({device, format, alphaMode:'opaque'});
+
+/* ------------------------------------------------------------------ math */
+const V = {
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  mul:(a,s)=>[a[0]*s,a[1]*s,a[2]*s], dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+  len:a=>Math.hypot(a[0],a[1],a[2]), norm:a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l];}
+};
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+function m4mul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s;}return o;}
+function lookAt(e,t,up){const f=V.norm(V.sub(t,e)),s=V.norm(V.cross(f,up)),u=V.cross(s,f);
+  return new Float32Array([s[0],u[0],-f[0],0, s[1],u[1],-f[1],0, s[2],u[2],-f[2],0, -V.dot(s,e),-V.dot(u,e),V.dot(f,e),1]);}
+function perspective(fovy,asp,n,f){const t=1/Math.tan(fovy/2);return new Float32Array([t/asp,0,0,0, 0,t,0,0, 0,0,f/(n-f),-1, 0,0,n*f/(n-f),0]);}
+function ortho(l,r,b,t,n,f){return new Float32Array([2/(r-l),0,0,0, 0,2/(t-b),0,0, 0,0,1/(n-f),0, -(r+l)/(r-l),-(t+b)/(t-b),n/(n-f),1]);}
+function hex(h){const n=parseInt(h.slice(1),16);const c=[(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];return c.map(x=>Math.pow(x,2.2));}
+function quatToMat(q){const [x,y,z,w]=q;return [[1-2*(y*y+z*z),2*(x*y+w*z),2*(x*z-w*y)],[2*(x*y-w*z),1-2*(x*x+z*z),2*(y*z+w*x)],[2*(x*z+w*y),2*(y*z-w*x),1-2*(x*x+y*y)]];}
+function randQuat(){const u=Math.random(),v=Math.random(),w=Math.random();const a=Math.sqrt(1-u),b=Math.sqrt(u);return [a*Math.sin(6.2832*v),a*Math.cos(6.2832*v),b*Math.sin(6.2832*w),b*Math.cos(6.2832*w)];}
+
+/* ---------------------------------------------------------------- shapes */
+function sdfUnit(p,kind,s){
+  if(kind===0) return Math.hypot(p[0],p[1],p[2])-s[0];
+  if(kind===1){const qx=Math.abs(p[0])-s[0],qy=Math.abs(p[1])-s[1],qz=Math.abs(p[2])-s[2];
+    return Math.hypot(Math.max(qx,0),Math.max(qy,0),Math.max(qz,0))+Math.min(Math.max(qx,qy,qz),0)-s[3];}
+  if(kind===2){const a=Math.hypot(p[0],p[2])-s[0];return Math.hypot(a,p[1])-s[1];}
+  if(kind===3){const y=p[1]-clamp(p[1],-s[0],s[0]);return Math.hypot(p[0],y,p[2])-s[1];}
+  const dx=Math.hypot(p[0],p[2])-s[0],dy=Math.abs(p[1])-s[1];
+  return Math.min(Math.max(dx,dy),0)+Math.hypot(Math.max(dx,0),Math.max(dy,0))-s[2];
+}
+function sdfGradJS(p,kind,s){const e=0.002,g=[0,0,0];for(let k=0;k<3;k++){const a=p.slice(),b=p.slice();a[k]+=e;b[k]-=e;g[k]=sdfUnit(a,kind,s)-sdfUnit(b,kind,s);}return V.norm(g);}
+
+function buildCubeSphere(n,kind,s){
+  const verts=[],map=new Map(),quads=[];
+  const warp=t=>Math.tan((t/n*2-1)*Math.PI/4);
+  function vid(face,u,v){
+    let x,y,z;
+    if(face===0){x=n;y=u;z=v;}else if(face===1){x=0;y=u;z=v;}else if(face===2){y=n;x=u;z=v;}
+    else if(face===3){y=0;x=u;z=v;}else if(face===4){z=n;x=u;y=v;}else{z=0;x=u;y=v;}
+    const key=x+'_'+y+'_'+z;let id=map.get(key);
+    if(id===undefined){
+      const d=V.norm([warp(x),warp(y),warp(z)]);
+      let lo=0,hi=3;for(let i=0;i<40;i++){const m=(lo+hi)/2;if(sdfUnit(V.mul(d,m),kind,s)<0)lo=m;else hi=m;}
+      id=verts.length;verts.push(V.mul(d,(lo+hi)/2));map.set(key,id);
+    }
+    return id;
+  }
+  for(let f=0;f<6;f++)for(let i=0;i<n;i++)for(let j=0;j<n;j++)quads.push([vid(f,i,j),vid(f,i+1,j),vid(f,i+1,j+1),vid(f,i,j+1)]);
+  return {verts,quads};
+}
+function buildTorus(nu,nv,s){
+  const verts=[],quads=[];
+  for(let i=0;i<nu;i++){const u=i/nu*Math.PI*2;for(let j=0;j<nv;j++){const v=j/nv*Math.PI*2;const r=s[0]+s[1]*Math.cos(v);verts.push([r*Math.cos(u),s[1]*Math.sin(v),r*Math.sin(u)]);}}
+  for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const a=i*nv+j,b=((i+1)%nu)*nv+j,c=((i+1)%nu)*nv+(j+1)%nv,d=i*nv+(j+1)%nv;quads.push([a,b,c,d]);}
+  return {verts,quads};
+}
+function finishShape(kind,s,mesh){
+  const {verts,quads}=mesh,n=verts.length,idx=[],nbSets=verts.map(()=>new Set());
+  for(const q of quads){
+    const cen=V.mul(V.add(V.add(verts[q[0]],verts[q[1]]),V.add(verts[q[2]],verts[q[3]])),0.25);
+    const nrm=V.cross(V.sub(verts[q[1]],verts[q[0]]),V.sub(verts[q[2]],verts[q[0]]));
+    const out=sdfGradJS(cen,kind,s);
+    const o=V.dot(nrm,out)>0?q:[q[0],q[3],q[2],q[1]];
+    idx.push(o[0],o[1],o[2],o[0],o[2],o[3]);
+    for(let k=0;k<4;k++){const a=q[k],b=q[(k+1)%4];nbSets[a].add(b);nbSets[b].add(a);}
+  }
+  const nb=[];let rb=0;const A=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<n;i++){
+    const p=verts[i],nrm=sdfGradJS(p,kind,s);
+    let t=V.cross(nrm,Math.abs(nrm[1])<0.9?[0,1,0]:[1,0,0]);t=V.norm(t);const bt=V.cross(nrm,t);
+    const arr=[...nbSets[i]].map(j=>{const e=V.sub(verts[j],p);return {j,a:Math.atan2(V.dot(e,bt),V.dot(e,t))};}).sort((x,y)=>x.a-y.a).map(o=>o.j);
+    while(arr.length<4)arr.push(-1);
+    nb.push(arr.slice(0,4));
+    rb=Math.max(rb,V.len(p));
+    for(let r=0;r<3;r++)for(let c=0;c<3;c++)A[c][r]+=p[r]*p[c];
+  }
+  // inverse of symmetric Aqq (columns)
+  const a=A[0],b=A[1],c=A[2],r0=V.cross(b,c),r1=V.cross(c,a),r2=V.cross(a,b),det=V.dot(a,r0);
+  const aqqInv=[[r0[0]/det,r1[0]/det,r2[0]/det],[r0[1]/det,r1[1]/det,r2[1]/det],[r0[2]/det,r1[2]/det,r2[2]/det]];
+  let vol0=0;
+  for(let i=0;i<n;i++){const ring=nb[i].filter(j=>j>=0);let N=[0,0,0];
+    for(let k=0;k<ring.length;k++){N=V.add(N,V.cross(V.sub(verts[ring[k]],verts[i]),V.sub(verts[ring[(k+1)%ring.length]],verts[i])));}
+    vol0+=V.dot(verts[i],N);}
+  return {kind,s,verts,nb,idx,rb,aqqInv,count:n,vol0};
+}
+const SHAPES=[
+  finishShape(0,[0.62,0,0,0],buildCubeSphere(10,0,[0.62,0,0,0])),
+  finishShape(1,[0.33,0.33,0.33,0.25],buildCubeSphere(10,1,[0.33,0.33,0.33,0.25])),
+  finishShape(2,[0.48,0.25,0,0],buildTorus(40,15,[0.48,0.25,0,0])),
+  finishShape(3,[0.36,0.37,0,0],buildCubeSphere(10,3,[0.36,0.37,0,0])),
+  finishShape(4,[0.42,0.12,0.2,0],buildCubeSphere(10,4,[0.42,0.12,0.2,0]))
+];
+{ // pack rest + index data
+  let rv=0,ri=0;for(const s of SHAPES){s.restOff=rv;s.idxOff=ri;rv+=s.count;ri+=s.idx.length;}
+  const buf=new ArrayBuffer(rv*32),f=new Float32Array(buf),iv=new Int32Array(buf);
+  for(const s of SHAPES)for(let i=0;i<s.count;i++){const o=(s.restOff+i)*8;f[o]=s.verts[i][0];f[o+1]=s.verts[i][1];f[o+2]=s.verts[i][2];f[o+3]=1;for(let k=0;k<4;k++)iv[o+4+k]=s.nb[i][k];}
+  var restBuf=device.createBuffer({size:buf.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(restBuf,0,buf);
+  const id=new Uint16Array(ri+(ri&1));for(const s of SHAPES)id.set(s.idx,s.idxOff);
+  var indexBuf=device.createBuffer({size:id.byteLength+(4-id.byteLength%4)%4,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(indexBuf,0,id);
+}
+
+/* ------------------------------------------------------------- materials */
+const MATS=[
+  {name:'Jelly', omega:70, beta:.65, damp:4, fric:.55, dens:1.0, smooth:.34, rough:.10, metal:0, trans:1.0, emis:0, irid:0, coat:0, sss:2.3,
+   colors:['#ff2463','#ff8a12','#72d91c','#1f74ff','#9b45ff','#ffcf0f']},
+  {name:'Rubber', omega:128, beta:.4, damp:1.2, fric:.9, dens:1.1, smooth:.2, rough:.42, metal:0, trans:0, emis:0, irid:0, coat:.25, sss:0, pattern:true,
+   colors:['#e8372c','#12a89a','#f5b90f','#2b50d8','#f2577f'], colors2:['#f6f1e4','#f6f1e4','#2a2f3a','#f6f1e4','#fff3c9']},
+  {name:'Chrome', omega:105, beta:.5, damp:3.5, fric:.35, dens:3.5, smooth:.3, rough:.07, metal:1, trans:0, emis:0, irid:0, coat:0, sss:0,
+   colors:['#f1f3f4','#ffcb69','#f3b3a1','#b9c8ff']},
+  {name:'Pearl', omega:86, beta:.55, damp:3.5, fric:.5, dens:1.4, smooth:.3, rough:.24, metal:0, trans:0, emis:0, irid:1, coat:1, sss:0,
+   colors:['#f3eee8','#f6d9e2','#2c2c38','#d9ecea']},
+  {name:'Glow', omega:60, beta:.65, damp:3.5, fric:.5, dens:.8, smooth:.34, rough:.32, metal:0, trans:.5, emis:2.6, irid:0, coat:0, sss:1.2,
+   colors:['#22eaff','#ff3df2','#5dff7a','#ffa51f']},
+  {name:'Mallow', omega:62, beta:.65, damp:10, fric:1.0, dens:.8, smooth:.4, rough:.86, metal:0, trans:0, emis:0, irid:0, coat:0, sss:0,
+   colors:['#ffc4d6','#c6f0d9','#d9ccff','#fff0b8']}
+];
+MATS.forEach(m=>m.ci=Math.floor(Math.random()*m.colors.length));
+
+/* ----------------------------------------------------------------- WGSL */
+const WGSL_COMMON = /* wgsl */`
+const VPB : u32 = ${VPB}u;
+const MAXB : u32 = ${MAXB}u;
+const FLOOR_Y : f32 = ${FLOOR_Y};
+const PI : f32 = 3.14159265;
+struct Particle { pos : vec4f, vel : vec4f };
+struct RestV { pos : vec4f, nb : vec4i };
+struct Body { c : vec4f, vc : vec4f, om : vec4f, q : vec4f, t0 : vec4f, t1 : vec4f, t2 : vec4f, i0 : vec4f, i1 : vec4f, i2 : vec4f };
+struct Param { shape : vec4f, info : vec4f, phys : vec4f, phys2 : vec4f, color : vec4f, color2 : vec4f, mat : vec4f, mat2 : vec4f, aq0 : vec4f, aq1 : vec4f, aq2 : vec4f };
+`;
+const WGSL_SDF = /* wgsl */`
+fn sdfUnit(p : vec3f, kind : i32, s : vec4f) -> f32 {
+  if (kind == 0) { return length(p) - s.x; }
+  if (kind == 1) { let q = abs(p) - s.xyz; return length(max(q, vec3f(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - s.w; }
+  if (kind == 2) { let q = vec2f(length(p.xz) - s.x, p.y); return length(q) - s.y; }
+  if (kind == 3) { var q = p; q.y = q.y - clamp(q.y, -s.x, s.x); return length(q) - s.y; }
+  let d = vec2f(length(p.xz) - s.x, abs(p.y) - s.y);
+  return min(max(d.x, d.y), 0.0) + length(max(d, vec2f(0.0))) - s.z;
+}
+fn sdfBody(p : vec3f, kind : i32, s : vec4f, sc : f32) -> f32 { return sc * sdfUnit(p / sc, kind, s); }
+fn sdfGrad(p : vec3f, kind : i32, s : vec4f, sc : f32) -> vec3f {
+  let e = 0.01 * sc; let k = vec2f(1.0, -1.0);
+  return normalize(k.xyy * sdfBody(p + k.xyy * e, kind, s, sc) + k.yyx * sdfBody(p + k.yyx * e, kind, s, sc)
+                 + k.yxy * sdfBody(p + k.yxy * e, kind, s, sc) + k.xxx * sdfBody(p + k.xxx * e, kind, s, sc));
+}
+`;
+const WGSL_SIMHEAD = /* wgsl */`
+struct Sim { g_dt : vec4f, tank : vec4f, boom : vec4f, misc : vec4f, grabA : array<vec4f, 4>, grabB : array<vec4f, 4> };
+@group(0) @binding(0) var<uniform> sim : Sim;
+@group(0) @binding(1) var<storage, read> pin : array<Particle>;
+@group(0) @binding(2) var<storage, read_write> pout : array<Particle>;
+@group(0) @binding(3) var<storage, read_write> bodies : array<Body>;
+@group(0) @binding(4) var<storage, read> params : array<Param>;
+@group(0) @binding(5) var<storage, read> rest : array<RestV>;
+`;
+const WGSL_BODYPASS = WGSL_COMMON + WGSL_SIMHEAD + /* wgsl */`
+fn quatToMat(q : vec4f) -> mat3x3f {
+  let x = q.x; let y = q.y; let z = q.z; let w = q.w;
+  return mat3x3f(vec3f(1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + w * z), 2.0 * (x * z - w * y)),
+                 vec3f(2.0 * (x * y - w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + w * x)),
+                 vec3f(2.0 * (x * z + w * y), 2.0 * (y * z - w * x), 1.0 - 2.0 * (x * x + y * y)));
+}
+fn quatMul(a : vec4f, b : vec4f) -> vec4f { return vec4f(a.w * b.xyz + b.w * a.xyz + cross(a.xyz, b.xyz), a.w * b.w - dot(a.xyz, b.xyz)); }
+fn inverse3(m : mat3x3f) -> mat3x3f {
+  let r0 = cross(m[1], m[2]); let r1 = cross(m[2], m[0]); let r2 = cross(m[0], m[1]);
+  var det = dot(m[0], r0);
+  if (abs(det) < 1e-8) { det = 1e-8; }
+  let id = 1.0 / det;
+  return transpose(mat3x3f(r0 * id, r1 * id, r2 * id));
+}
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) gid : vec3u) {
+  let b = gid.x;
+  if (b >= MAXB) { return; }
+  let prm = params[b];
+  if (prm.info.w < 0.5) { return; }
+  let n = u32(prm.info.z); let ro = u32(prm.info.y); let base = b * VPB; let sc = prm.phys2.x;
+  let g = sim.g_dt.xyz; let dt = sim.g_dt.w;
+  var sp = vec3f(0.0); var sv = vec3f(0.0);
+  var a0 = vec3f(0.0); var a1 = vec3f(0.0); var a2 = vec3f(0.0);
+  for (var i = 0u; i < n; i++) {
+    let P = pin[base + i];
+    let v = P.vel.xyz + g * dt;
+    let p = P.pos.xyz + v * dt;
+    let q = rest[ro + i].pos.xyz * sc;
+    sp += p; sv += v;
+    a0 += p * q.x; a1 += p * q.y; a2 += p * q.z;
+  }
+  let inv = 1.0 / f32(n);
+  let c = sp * inv; let vc = sv * inv;
+  let Apq = mat3x3f(a0, a1, a2);
+  // rotation: iterative polar extraction, warm-started from last step
+  var q = bodies[b].q;
+  for (var it = 0; it < 8; it++) {
+    let R = quatToMat(q);
+    let w3 = (cross(R[0], Apq[0]) + cross(R[1], Apq[1]) + cross(R[2], Apq[2])) *
+             (1.0 / (abs(dot(R[0], Apq[0]) + dot(R[1], Apq[1]) + dot(R[2], Apq[2])) + 1e-9));
+    let w = length(w3);
+    if (w < 1e-6) { break; }
+    let ax = w3 / w;
+    q = normalize(quatMul(vec4f(ax * sin(w * 0.5), cos(w * 0.5)), q));
+  }
+  let R = quatToMat(q);
+  let A = Apq * mat3x3f(prm.aq0.xyz, prm.aq1.xyz, prm.aq2.xyz);
+  let det = determinant(A);
+  var Ap = R;
+  if (det > 0.03 && det < 30.0) { Ap = A * pow(clamp(det, 0.3, 3.0), -1.0 / 3.0); }
+  // blend towards the stretched fit, but cap how far the goal shape may deform so blobs stiffen instead of pancaking
+  let Dm = Ap - R;
+  let dn = sqrt(dot(Dm[0], Dm[0]) + dot(Dm[1], Dm[1]) + dot(Dm[2], Dm[2]));
+  let T = R + Dm * (prm.phys.y * min(1.0, 0.75 / max(dn, 1e-5)));
+  let Ti = inverse3(T);
+  // rigid velocity field + bounds
+  var L = vec3f(0.0); var rb = 0.0; var vol = 0.0;
+  var ixx = 0.0; var iyy = 0.0; var izz = 0.0; var ixy = 0.0; var ixz = 0.0; var iyz = 0.0;
+  for (var i = 0u; i < n; i++) {
+    let P = pin[base + i];
+    let v = P.vel.xyz + g * dt;
+    let pp = P.pos.xyz + v * dt;
+    let r = pp - c;
+    let rvv = rest[ro + i];
+    var Nn = vec3f(0.0); var prev = vec3f(0.0); var first = vec3f(0.0); var cnt = 0;
+    for (var k = 0; k < 4; k++) {
+      let j = rvv.nb[k];
+      if (j < 0) { break; }
+      let Pn = pin[base + u32(j)];
+      let e = Pn.pos.xyz + (Pn.vel.xyz + g * dt) * dt - pp;
+      if (cnt == 0) { first = e; } else { Nn += cross(prev, e); }
+      prev = e; cnt++;
+    }
+    Nn += cross(prev, first);
+    vol += dot(r, Nn);
+    L += cross(r, v - vc);
+    ixx += r.y * r.y + r.z * r.z; iyy += r.x * r.x + r.z * r.z; izz += r.x * r.x + r.y * r.y;
+    ixy -= r.x * r.y; ixz -= r.x * r.z; iyz -= r.y * r.z;
+    rb = max(rb, dot(r, r));
+  }
+  let I = mat3x3f(vec3f(ixx, ixy, ixz), vec3f(ixy, iyy, iyz), vec3f(ixz, iyz, izz));
+  let om = inverse3(I) * L;
+  var B : Body;
+  B.c = vec4f(c, sqrt(rb));
+  B.vc = vec4f(vc, clamp(vol / max(prm.phys2.w, 1e-5), -1.0, 3.0));
+  B.om = vec4f(clamp(om, vec3f(-40.0), vec3f(40.0)), 0.0);
+  B.q = q;
+  B.t0 = vec4f(T[0], 0.0); B.t1 = vec4f(T[1], 0.0); B.t2 = vec4f(T[2], 0.0);
+  B.i0 = vec4f(Ti[0], 0.0); B.i1 = vec4f(Ti[1], 0.0); B.i2 = vec4f(Ti[2], 0.0);
+  bodies[b] = B;
+}`;
+const WGSL_PARTPASS = WGSL_COMMON + WGSL_SIMHEAD + WGSL_SDF + /* wgsl */`
+fn slide(p : vec3f, x0 : vec3f, n : vec3f, pen : f32, vs : vec3f, mu : f32, dt : f32) -> vec3f {
+  let d = p - x0 - vs * dt;
+  let dtan = d - n * dot(d, n);
+  let l = length(dtan);
+  if (l < 1e-7) { return p; }
+  return p - dtan * min(1.0, mu * pen / l);
+}
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid : vec3u) {
+  let idx = gid.x;
+  if (idx >= MAXB * VPB) { return; }
+  let bid = idx / VPB; let li = idx % VPB;
+  let prm = params[bid];
+  let P = pin[idx];
+  if (prm.info.w < 0.5 || li >= u32(prm.info.z)) { pout[idx] = P; return; }
+  let g = sim.g_dt.xyz; let dt = sim.g_dt.w;
+  let ro = u32(prm.info.y); let base = bid * VPB; let sc = prm.phys2.x;
+  let B = bodies[bid];
+  let c = B.c.xyz;
+  let T = mat3x3f(B.t0.xyz, B.t1.xyz, B.t2.xyz);
+  let x0 = P.pos.xyz;
+  var v0 = P.vel.xyz + g * dt;
+  v0.z -= c.z * sim.misc.z * dt;   // game mode: ease blobs towards the middle plane
+  if (sim.boom.w > 0.0) {
+    let r = x0 - sim.boom.xyz;
+    let r2 = dot(r, r);
+    v0 += r * (inverseSqrt(r2 + 0.01) * sim.boom.w / (1.0 + r2 * 0.15) * dt);
+  }
+  var p = x0 + v0 * dt;
+  let rv = rest[ro + li];
+  let q = rv.pos.xyz * sc;
+  let goal = c + T * q;
+  // deformation field: blend with neighbours so dents spread and ripple
+  var u = p - goal;
+  var un = vec3f(0.0); var cnt = 0.0;
+  var nrm = vec3f(0.0); var prevE = vec3f(0.0); var firstE = vec3f(0.0);
+  for (var k = 0; k < 4; k++) {
+    let j = rv.nb[k];
+    if (j < 0) { break; }
+    let Pn = pin[base + u32(j)];
+    let pn = Pn.pos.xyz + (Pn.vel.xyz + g * dt) * dt;
+    un += pn - (c + T * (rest[ro + u32(j)].pos.xyz * sc));
+    let e = pn - p;
+    if (cnt < 0.5) { firstE = e; } else { nrm += cross(prevE, e); }
+    prevE = e;
+    cnt += 1.0;
+  }
+  nrm += cross(prevE, firstE);
+  if (cnt > 0.0) { u = mix(u, un / cnt, prm.phys2.y); }
+  let wdt = prm.phys.x * sim.misc.x * dt;
+  let alpha = min(wdt * wdt, 0.9);
+  u *= (1.0 - alpha);
+  p = goal + u;
+  // internal pressure: lost volume pushes the skin back out, so squashed blobs bulge
+  let nl2 = dot(nrm, nrm);
+  if (nl2 > 1e-12) { p += nrm * (inverseSqrt(nl2) * alpha * 0.8 * clamp(1.0 - B.vc.w, -0.3, 0.6) * sc * 0.6); }
+  // finger grabs
+  for (var k = 0; k < 4; k++) {
+    let ga = sim.grabA[k];
+    if (ga.w < -0.5 || u32(ga.w + 0.5) != bid) { continue; }
+    let gb = sim.grabB[k];
+    var d = gb.xyz - (c + T * ga.xyz);
+    let dl = length(d);
+    if (dl > 2.5) { d *= 2.5 / dl; }
+    let dq = q - ga.xyz;
+    let w = exp(-dot(dq, dq) / (gb.w * gb.w));
+    p += d * ((0.14 + 0.86 * w) * (1.0 - exp(-dt * 38.0)));
+  }
+  // other bodies: push out of their deformed signed-distance shape, meeting at a shared contact surface
+  let nb = u32(sim.tank.w);
+  let mu = prm.phys.w;
+  for (var j = 0u; j < nb; j++) {
+    if (j == bid) { continue; }
+    let pj = params[j];
+    if (pj.info.w < 0.5) { continue; }
+    let Bj = bodies[j];
+    let dc = p - Bj.c.xyz;
+    let rj = Bj.c.w + 0.02;
+    if (dot(dc, dc) > rj * rj) { continue; }
+    let Ti = mat3x3f(Bj.i0.xyz, Bj.i1.xyz, Bj.i2.xyz);
+    let kind = i32(pj.info.x); let sj = pj.phys2.x;
+    let pl = Ti * dc;
+    let dl = sdfBody(pl, kind, pj.shape, sj);
+    if (dl >= 0.0) { continue; }
+    let dg = sdfBody(Ti * (goal - Bj.c.xyz), kind, pj.shape, sj);
+    let ka = prm.phys2.z; let kb = pj.phys2.z;
+    let allowed = min(max(-dg, 0.0) * ka / (ka + kb), 0.09);
+    let pen = -dl - allowed;
+    if (pen <= 0.0) { continue; }
+    let nl = sdfGrad(pl, kind, pj.shape, sj);
+    let nw = transpose(Ti) * nl;
+    let len = max(length(nw), 1e-4);
+    let n = nw / len;
+    let push = min(pen / len, 0.25);
+    p += n * push;
+    p = slide(p, x0, n, push, Bj.vc.xyz + cross(Bj.om.xyz, p - Bj.c.xyz), sqrt(mu * pj.phys.w), dt);
+  }
+  // tank: floor, ceiling, walls
+  let hw = sim.tank.x; let H = sim.tank.y; let hd = sim.tank.z;
+  if (p.y < FLOOR_Y) { let pen = FLOOR_Y - p.y; p.y = FLOOR_Y; p = slide(p, x0, vec3f(0.0, 1.0, 0.0), pen, vec3f(0.0), mu, dt); }
+  if (p.y > H) { let pen = p.y - H; p.y = H; p = slide(p, x0, vec3f(0.0, -1.0, 0.0), pen, vec3f(0.0), mu, dt); }
+  if (p.x < -hw) { let pen = -hw - p.x; p.x = -hw; p = slide(p, x0, vec3f(1.0, 0.0, 0.0), pen, vec3f(0.0), mu * 0.4, dt); }
+  if (p.x > hw) { let pen = p.x - hw; p.x = hw; p = slide(p, x0, vec3f(-1.0, 0.0, 0.0), pen, vec3f(0.0), mu * 0.4, dt); }
+  if (p.z < -hd) { let pen = -hd - p.z; p.z = -hd; p = slide(p, x0, vec3f(0.0, 0.0, 1.0), pen, vec3f(0.0), mu * 0.4, dt); }
+  if (p.z > hd) { let pen = p.z - hd; p.z = hd; p = slide(p, x0, vec3f(0.0, 0.0, -1.0), pen, vec3f(0.0), mu * 0.4, dt); }
+  var v = (p - x0) / dt;
+  let vr = B.vc.xyz + cross(B.om.xyz, p - c);
+  v = mix(v, vr, 1.0 - exp(-prm.phys.z * dt));
+  v *= exp(-0.12 * dt);
+  let sp = length(v);
+  if (sp > 32.0) { v *= 32.0 / sp; }
+  if (!(dot(p, p) < 1e6) || !(dot(v, v) < 1e6)) { p = vec3f(0.0, H * 0.5, 0.0) + q; v = vec3f(0.0); }
+  pout[idx] = Particle(vec4f(p, 1.0), vec4f(v, 0.0));
+}`;
+
+const WGSL_GLOBALS = /* wgsl */`
+struct Globals {
+  lightVP : mat4x4f,
+  lightDir : vec4f,   // xyz towards light, w light depth range in world units
+  sun : vec4f,        // rgb radiance, w studio softbox gain
+  skyTop : vec4f,
+  skyHor : vec4f,
+  ground : vec4f,     // floor albedo, w floor gloss
+  bgTop : vec4f,      // display space
+  bgBot : vec4f,
+  floorDisp : vec4f,
+  glass : vec4f,
+  misc : vec4f,       // time, body count, night, shadow texel world size
+  tank : vec4f,       // half width, height, half depth, shadow map size
+  res : vec4f,
+};
+`;
+const WGSL_SHADOW = WGSL_COMMON + WGSL_GLOBALS + /* wgsl */`
+@group(0) @binding(0) var<uniform> G : Globals;
+@group(0) @binding(1) var<storage, read> particles : array<Particle>;
+@group(0) @binding(3) var<storage, read> params : array<Param>;
+struct SOut { @builtin(position) clip : vec4f, @location(0) @interpolate(flat) bid : u32 };
+@vertex fn vs(@builtin(vertex_index) vi : u32, @builtin(instance_index) bid : u32) -> SOut {
+  var o : SOut;
+  o.clip = G.lightVP * vec4f(particles[bid * VPB + vi].pos.xyz, 1.0);
+  o.bid = bid;
+  return o;
+}
+@fragment fn fs(in : SOut) -> @location(0) vec4f {
+  let prm = params[in.bid];
+  let t = prm.mat.z;
+  let tint = pow(prm.color.rgb, vec3f(0.7)) * (0.82 * t) + prm.color.rgb * prm.mat.w * 0.1;
+  return vec4f(tint, 1.0);
+}`;
+
+const WGSL_RENDER = WGSL_COMMON + WGSL_GLOBALS + /* wgsl */`
+struct Camera { vp : mat4x4f, pos : vec4f };
+@group(0) @binding(0) var<uniform> cam : Camera;
+@group(1) @binding(0) var<uniform> G : Globals;
+@group(1) @binding(1) var<storage, read> particles : array<Particle>;
+@group(1) @binding(2) var<storage, read> rest : array<RestV>;
+@group(1) @binding(3) var<storage, read> params : array<Param>;
+@group(1) @binding(4) var<storage, read> bodies : array<Body>;
+@group(1) @binding(5) var shadowTex : texture_depth_2d;
+@group(1) @binding(6) var shadowSamp : sampler_comparison;
+@group(1) @binding(7) var tintTex : texture_2d<f32>;
+@group(1) @binding(8) var linSamp : sampler;
+
+fn sat(x : f32) -> f32 { return clamp(x, 0.0, 1.0); }
+fn display(c : vec3f) -> vec3f {
+  let x = c * G.skyTop.w;
+  let t = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3f(0.0), vec3f(1.0));
+  return pow(t, vec3f(1.0 / 2.2));
+}
+fn bgColor(uv : vec2f) -> vec3f {
+  var c = mix(G.bgTop.rgb, G.bgBot.rgb, smoothstep(0.02, 0.85, uv.y));
+  let d = uv - vec2f(0.5, 0.45);
+  c *= 1.0 - dot(d, d) * 0.22;
+  return c;
+}
+fn ign(fc : vec2f) -> f32 { return fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715)))); }
+fn vogel(i : i32, n : i32, phi : f32) -> vec2f {
+  let r = sqrt((f32(i) + 0.5) / f32(n)); let a = f32(i) * 2.39996 + phi;
+  return vec2f(cos(a), sin(a)) * r;
+}
+fn lightUV(X : vec3f) -> vec3f { let lp = G.lightVP * vec4f(X, 1.0); return vec3f(lp.xy * vec2f(0.5, -0.5) + 0.5, lp.z); }
+fn inUnit(uv : vec2f) -> bool { return uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0; }
+
+fn skyColor(d : vec3f, rough : f32) -> vec3f {
+  var c = mix(G.skyHor.rgb, G.skyTop.rgb, pow(max(d.y, 0.0), 0.55));
+  // a darker studio wall band above the horizon gives mirror finishes something to bite on
+  let band = smoothstep(0.03, 0.1 + rough * 0.3, d.y) * (1.0 - smoothstep(0.32, 0.5 + rough * 0.3, d.y));
+  c *= 1.0 - 0.62 * band / (1.0 + rough * 6.0);
+  let e = 0.5 + rough * 9.0;
+  let gain = G.sun.w / (1.0 + rough * 4.0);
+  if (d.y > 0.03) {
+    let h = d * (13.0 / d.y);
+    let bx = 1.0 - smoothstep(5.5 - e, 5.5 + e, abs(h.x + 2.0));
+    let bz = 1.0 - smoothstep(3.5 - e, 3.5 + e, abs(h.z - 3.0));
+    c += vec3f(1.0, 0.98, 0.95) * (bx * bz * 5.0 * gain);
+  }
+  let ax = abs(d.x);
+  if (ax > 0.05) {
+    let h = d * (11.0 / ax);
+    let sy = 1.0 - smoothstep(4.5 - e, 4.5 + e, abs(h.y - 5.0));
+    let sz = 1.0 - smoothstep(1.3 - e * 0.6, 1.3 + e * 0.6, abs(h.z - 1.0));
+    let tint = select(vec3f(0.72, 0.88, 1.0), vec3f(1.0, 0.84, 0.7), d.x > 0.0);
+    c += tint * (sy * sz * 2.4 * gain);
+  }
+  return c;
+}
+fn ambFloor() -> vec3f { return (G.skyHor.rgb + G.skyTop.rgb) * 0.27; }
+fn floorAlbedo(xz : vec2f, fw : f32) -> vec3f {
+  let q = abs(xz) - G.tank.xz;
+  let dOut = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
+  let inside = 1.0 - smoothstep(-fw, fw, dOut);
+  let border = 1.0 - smoothstep(0.018, 0.018 + fw * 1.5 + 0.004, abs(dOut));
+  let cell = 0.4;
+  let f = (fract(xz / cell + 0.5) - 0.5) * cell;
+  let dots = (1.0 - smoothstep(0.02, 0.02 + fw * 1.5 + 0.003, length(f))) * inside * (1.0 - sat(fw * 6.0));
+  return G.ground.rgb * (1.0 - 0.32 * dots - 0.4 * border * (1.0 - sat(fw * 4.0))) * mix(0.93, 1.0, inside);
+}
+fn floorLitSimple(X : vec3f, fw : f32) -> vec3f {
+  let l = lightUV(X);
+  var t = vec3f(1.0);
+  if (inUnit(l.xy)) { t = textureSampleLevel(tintTex, linSamp, l.xy, 0.0).rgb; }
+  return floorAlbedo(X.xz, fw) * (G.sun.rgb * t * G.lightDir.y + ambFloor());
+}
+fn envRadiance(P : vec3f, d : vec3f, rough : f32) -> vec3f {
+  var col = skyColor(d, rough);
+  if (d.y < -0.001) {
+    let t = max(P.y, 0.0) / -d.y;
+    let X = P + d * t;
+    let fl = floorLitSimple(X, 0.02 + rough * 0.3 + t * 0.012);
+    let fc = mix(fl, G.skyHor.rgb, smoothstep(10.0, 34.0, length(X.xz)));
+    col = mix(col, fc, smoothstep(0.0, 0.05 + rough * 0.3, -d.y));
+  }
+  return col;
+}
+fn irradiance(N : vec3f, P : vec3f) -> vec3f {
+  let sky = mix(G.skyHor.rgb, G.skyTop.rgb, 0.6) * 0.8 + vec3f(0.22) * G.sun.w;
+  let bounce = G.ground.rgb * (G.sun.rgb * (G.lightDir.y * 0.45) + sky * 0.45);
+  return mix(bounce * mix(0.35, 1.0, sat(P.y / 0.7)), sky, N.y * 0.5 + 0.5);
+}
+// other blobs seen in mirror-like surfaces, traced as proxy spheres
+fn proxyReflect(P : vec3f, d : vec3f, me : u32, back : vec3f) -> vec3f {
+  let nb = u32(G.misc.y);
+  var tmin = 1e9; var hit = -1; var soft = 0.0;
+  var tfloor = 1e9;
+  if (d.y < -0.001) { tfloor = P.y / -d.y; }
+  for (var j = 0u; j < nb; j++) {
+    if (j == me || params[j].info.w < 0.5) { continue; }
+    let Bc = bodies[j].c;
+    let r = Bc.w * 0.8;
+    let oc = P - Bc.xyz;
+    let b = dot(oc, d);
+    let h = b * b - (dot(oc, oc) - r * r);
+    if (h > 0.0) {
+      let t = -b - sqrt(h);
+      if (t > 0.0 && t < tmin) { tmin = t; hit = i32(j); soft = h / (r * r); }
+    }
+  }
+  if (hit < 0 || tmin > tfloor) { return back; }
+  let pm = params[u32(hit)];
+  let n = normalize(P + d * tmin - bodies[u32(hit)].c.xyz);
+  let L = G.lightDir.xyz;
+  var col = pm.color.rgb * (1.0 - pm.mat.y) * (G.sun.rgb * (max(dot(n, L), 0.0) * 0.7 + pm.mat.z * 0.25) + irradiance(n, P + d * tmin));
+  col += pm.color.rgb * pm.mat.y * skyColor(reflect(d, n), 0.25);
+  col += pm.color.rgb * pm.mat.w * 0.9;
+  return mix(back, col, smoothstep(0.0, 0.3, soft));
+}
+
+/* ---- background ---- */
+struct BOut { @builtin(position) clip : vec4f, @location(0) uv : vec2f };
+@vertex fn vsBg(@builtin(vertex_index) vi : u32) -> BOut {
+  var o : BOut;
+  let p = vec2f(f32((vi << 1u) & 2u), f32(vi & 2u));
+  o.clip = vec4f(p * 2.0 - 1.0, 1.0, 1.0);
+  o.uv = vec2f(p.x, 1.0 - p.y);
+  return o;
+}
+@fragment fn fsBg(in : BOut) -> @location(0) vec4f { return vec4f(bgColor(in.uv), 1.0); }
+
+/* ---- floor ---- */
+struct FOut { @builtin(position) clip : vec4f, @location(0) wp : vec3f };
+@vertex fn vsFloor(@builtin(vertex_index) vi : u32) -> FOut {
+  var o : FOut;
+  let c = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(-1.0, 1.0), vec2f(1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+  let p = vec3f(c[vi].x * 80.0, 0.0, c[vi].y * 80.0);
+  o.wp = p;
+  o.clip = cam.vp * vec4f(p, 1.0);
+  return o;
+}
+fn floorShadow(X : vec3f, noise : f32) -> vec3f {
+  let l = lightUV(X);
+  if (!inUnit(l.xy)) { return vec3f(1.0); }
+  let res = G.tank.w;
+  var zs = 0.0; var nbk = 0.0;
+  for (var i = 0; i < 10; i++) {
+    let o = vogel(i, 10, noise * 6.2832) * 30.0;
+    let tc = vec2i(clamp(l.xy * res + o, vec2f(0.0), vec2f(res - 1.0)));
+    let z = textureLoad(shadowTex, tc, 0);
+    if (z < l.z - 0.0015) { zs += z; nbk += 1.0; }
+  }
+  if (nbk < 0.5) { return vec3f(1.0); }
+  let dist = (l.z - zs / nbk) * G.lightDir.w;
+  let rad = clamp(dist * 0.085 / G.misc.w, 1.6, 30.0);
+  var acc = vec3f(0.0);
+  for (var i = 0; i < 16; i++) {
+    let o = vogel(i, 16, noise * 6.2832 + 1.3) * rad;
+    acc += textureSampleLevel(tintTex, linSamp, l.xy + o / res, 0.0).rgb;
+  }
+  return acc / 16.0;
+}
+@fragment fn fsFloor(in : FOut) -> @location(0) vec4f {
+  let P = in.wp;
+  let fw = max(fwidth(P.x), fwidth(P.z));
+  let uv = in.clip.xy * G.res.zw;
+  let bg = bgColor(uv);
+  let V = normalize(cam.pos.xyz - P);
+  let alb = floorAlbedo(P.xz, fw);
+  let sunT = floorShadow(P, ign(in.clip.xy));
+  var occ = 0.0; var glow = vec3f(0.0);
+  let nb = u32(G.misc.y);
+  for (var j = 0u; j < nb; j++) {
+    let pm = params[j];
+    if (pm.info.w < 0.5) { continue; }
+    let Bc = bodies[j].c;
+    let d = Bc.xyz - P;
+    let l2 = dot(d, d); let l = sqrt(l2);
+    let r = Bc.w * 0.78;
+    occ += sat(d.y / l) * sat(r * r / l2);
+    if (pm.mat.w > 0.0) { glow += pm.color.rgb * (pm.mat.w * mix(0.1, 0.75, G.misc.z) * sat(d.y / l + 0.1) * r * r / (l2 + r * r)); }
+  }
+  let ao = mix(1.0, 0.2, sat(occ * 0.9));
+  let lit = alb * ((G.sun.rgb * sunT * G.lightDir.y + ambFloor() * ao) * mix(1.0, 0.72, sat(occ * 1.4)) + glow);
+  let fog = smoothstep(9.0, 30.0, length(P.xz));
+  let col = mix(display(lit), bg, fog);
+  let fres = pow(1.0 - sat(V.y), 5.0);
+  let refl = clamp(G.ground.w * (0.35 + fres * 2.0), 0.0, 0.75) * (1.0 - fog);
+  return vec4f(col, 1.0 - refl);
+}
+
+/* ---- glass tank ---- */
+struct TOut { @builtin(position) clip : vec4f, @location(0) wp : vec3f, @location(1) n : vec3f };
+@vertex fn vsTank(@builtin(vertex_index) vi : u32) -> TOut {
+  let cs = array<vec3f, 20>(
+    vec3f(1.0, 0.0, 1.0), vec3f(1.0, 0.0, -1.0), vec3f(1.0, 1.0, -1.0), vec3f(1.0, 1.0, 1.0),
+    vec3f(-1.0, 0.0, -1.0), vec3f(-1.0, 0.0, 1.0), vec3f(-1.0, 1.0, 1.0), vec3f(-1.0, 1.0, -1.0),
+    vec3f(-1.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 1.0, 1.0), vec3f(-1.0, 1.0, 1.0),
+    vec3f(1.0, 0.0, -1.0), vec3f(-1.0, 0.0, -1.0), vec3f(-1.0, 1.0, -1.0), vec3f(1.0, 1.0, -1.0),
+    vec3f(-1.0, 1.0, 1.0), vec3f(1.0, 1.0, 1.0), vec3f(1.0, 1.0, -1.0), vec3f(-1.0, 1.0, -1.0));
+  let ns = array<vec3f, 5>(vec3f(1.0, 0.0, 0.0), vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, -1.0), vec3f(0.0, 1.0, 0.0));
+  let qi = array<u32, 6>(0u, 1u, 2u, 0u, 2u, 3u);
+  let face = vi / 6u;
+  let c = cs[face * 4u + qi[vi % 6u]];
+  var o : TOut;
+  o.wp = vec3f(c.x * (G.tank.x + 0.03), c.y * (G.tank.y + 0.03), c.z * (G.tank.z + 0.03));
+  o.n = ns[face];
+  o.clip = cam.vp * vec4f(o.wp, 1.0);
+  return o;
+}
+@fragment fn fsTank(in : TOut) -> @location(0) vec4f {
+  let P = in.wp;
+  let fw = max(max(fwidth(P.x), fwidth(P.y)), fwidth(P.z));
+  let a = G.tank.x + 0.03 - abs(P.x); let b = G.tank.z + 0.03 - abs(P.z); let c = min(P.y, G.tank.y + 0.03 - P.y);
+  let mid = a + b + c - max(a, max(b, c)) - min(a, min(b, c));
+  let line = 1.0 - smoothstep(0.012, 0.012 + fw * 1.5, mid);
+  let V = normalize(cam.pos.xyz - P);
+  let film = 0.025 + 0.2 * pow(1.0 - abs(dot(V, in.n)), 3.0);
+  let alpha = (line * 0.55 + film * 0.5) * G.glass.a;
+  return vec4f(G.glass.rgb, alpha);
+}
+
+/* ---- blobs ---- */
+struct VOut { @builtin(position) clip : vec4f, @location(0) wp : vec3f, @location(1) n : vec3f, @location(2) rp : vec3f, @location(3) @interpolate(flat) bid : u32 };
+@vertex fn vsBody(@builtin(vertex_index) vi : u32, @builtin(instance_index) bid : u32) -> VOut {
+  let prm = params[bid];
+  let ro = u32(prm.info.y); let base = bid * VPB;
+  let p = particles[base + vi].pos.xyz;
+  let rv = rest[ro + vi];
+  var n = vec3f(0.0); var prev = vec3f(0.0); var first = vec3f(0.0); var cnt = 0;
+  for (var k = 0; k < 4; k++) {
+    let j = rv.nb[k];
+    if (j < 0) { break; }
+    let e = particles[base + u32(j)].pos.xyz - p;
+    if (cnt == 0) { first = e; } else { n += cross(prev, e); }
+    prev = e; cnt++;
+  }
+  n += cross(prev, first);
+  var o : VOut;
+  o.wp = p; o.n = n; o.rp = rv.pos.xyz; o.bid = bid;
+  o.clip = cam.vp * vec4f(p, 1.0);
+  return o;
+}
+fn ggx(NoH : f32, a : f32) -> f32 { let a2 = a * a; let d = NoH * NoH * (a2 - 1.0) + 1.0; return a2 / (PI * d * d); }
+fn specLobe(N : vec3f, V : vec3f, L : vec3f, rough : f32) -> f32 {
+  let H = normalize(V + L);
+  let a = max(rough * rough, 0.004);
+  let NoL = sat(dot(N, L)); let NoV = max(dot(N, V), 0.001);
+  let k = a * 0.5;
+  let vis = 0.25 / ((NoL * (1.0 - k) + k) * (NoV * (1.0 - k) + k));
+  return min(ggx(sat(dot(N, H)), a) * vis, 40.0) * NoL;
+}
+@fragment fn fsBody(in : VOut) -> @location(0) vec4f {
+  let prm = params[in.bid];
+  let P = in.wp;
+  let N = normalize(in.n);
+  let V = normalize(cam.pos.xyz - P);
+  let L = G.lightDir.xyz;
+  var base = prm.color.rgb;
+  let pat = i32(prm.color.a + 0.5);
+  if (pat == 1) {
+    base = mix(base, prm.color2.rgb, smoothstep(-0.12, 0.12, sin(in.rp.y * prm.color2.a)));
+  } else if (pat == 2) {
+    let s = sin(in.rp.x * 6.0 + sin(in.rp.y * 5.0 + in.rp.z * 3.0) * 1.7 + in.rp.z * 4.0);
+    base = mix(base, prm.color2.rgb, smoothstep(0.1, 0.3, s));
+  }
+  let rough = prm.mat.x; let metal = prm.mat.y; let trans = prm.mat.z; let emis = prm.mat.w;
+  let irid = prm.mat2.x; let coat = prm.mat2.y; let sss = prm.mat2.z;
+  let NoV = max(dot(N, V), 0.001);
+  let NoL = dot(N, L);
+  // shadow + light path length through the blob
+  let res = G.tank.w;
+  let ls = lightUV(P + N * 0.035);
+  var lit = 1.0; var thick = 0.0;
+  if (inUnit(ls.xy)) {
+    let bias = 0.03 / G.lightDir.w;
+    let o = 0.9 / res;
+    lit = 0.25 * (textureSampleCompareLevel(shadowTex, shadowSamp, ls.xy + vec2f(-o, -o), ls.z - bias)
+                + textureSampleCompareLevel(shadowTex, shadowSamp, ls.xy + vec2f(o, -o), ls.z - bias)
+                + textureSampleCompareLevel(shadowTex, shadowSamp, ls.xy + vec2f(-o, o), ls.z - bias)
+                + textureSampleCompareLevel(shadowTex, shadowSamp, ls.xy + vec2f(o, o), ls.z - bias));
+    let lq = lightUV(P);
+    let tc = vec2i(clamp(lq.xy * res - 0.5, vec2f(0.0), vec2f(res - 2.0)));
+    let zm = 0.25 * (textureLoad(shadowTex, tc, 0) + textureLoad(shadowTex, tc + vec2i(1, 0), 0)
+                   + textureLoad(shadowTex, tc + vec2i(0, 1), 0) + textureLoad(shadowTex, tc + vec2i(1, 1), 0));
+    thick = max(lq.z - zm, 0.0) * G.lightDir.w;
+  }
+  var F0 = mix(vec3f(0.04), base, metal);
+  var diffC = base * (1.0 - metal);
+  if (irid > 0.0) {
+    let film = 0.5 + 0.5 * cos(6.2832 * (vec3f(0.0, 0.33, 0.67) + NoV * 0.6 + prm.mat2.w));
+    F0 = mix(F0, vec3f(0.07) + film * 0.26, irid);
+    diffC *= mix(vec3f(1.0), 0.78 + film * 0.4, irid);
+  }
+  let F = F0 + (vec3f(1.0) - F0) * pow(1.0 - NoV, 5.0);
+  let wrap = trans * 0.45;
+  let ndl = sat((NoL + wrap) / (1.0 + wrap));
+  let sun = G.sun.rgb;
+  var col = sun * lit * ndl * diffC * mix(1.0, 0.3, trans);
+  col += sun * lit * specLobe(N, V, L, rough) * F0 * mix(1.0, 3.0, metal) + sun * lit * specLobe(N, V, L, rough) * (F - F0);
+  if (coat > 0.0) { col += sun * lit * specLobe(N, V, L, 0.09) * 0.25 * coat; }
+  // ambient
+  let amb = irradiance(N, P);
+  col += amb * diffC * mix(1.0, 0.22, trans);
+  // light bleeding through translucent bodies
+  let sig = (vec3f(1.0) - base) * sss + vec3f(0.35);
+  if (trans > 0.0) {
+    let Tr = exp(-sig * thick * 1.25);
+    col += sun * Tr * pow(base, vec3f(0.7)) * (trans * (0.16 + 0.62 * sat(0.35 - NoL)));
+    let rb = bodies[in.bid].c.w;
+    let Rf = refract(-V, N, 0.75);
+    let through = envRadiance(P, Rf, 0.2) * exp(-sig * rb * 2.1 * NoV);
+    col += through * pow(base, vec3f(0.4)) * (trans * 0.85) * (vec3f(1.0) - F);
+  }
+  // glowing neighbours light this blob
+  let nb = u32(G.misc.y);
+  for (var j = 0u; j < nb; j++) {
+    let em = params[j].mat.w;
+    if (j == in.bid || em <= 0.0 || params[j].info.w < 0.5) { continue; }
+    let Bc = bodies[j].c;
+    let d = Bc.xyz - P; let l2 = dot(d, d); let r = Bc.w * 0.8;
+    let nl = sat(dot(N, d) * inverseSqrt(l2) * 0.75 + 0.25);
+    col += (diffC + F0 * 0.6) * params[j].color.rgb * (em * mix(0.12, 0.7, G.misc.z) * nl * r * r / (l2 + r * r));
+  }
+  // reflections
+  let R = reflect(-V, N);
+  var env = envRadiance(P, R, rough);
+  if (rough < 0.3) { env = proxyReflect(P + N * 0.02, R, in.bid, env); }
+  col += env * F * mix(1.0, 0.75, rough);
+  if (coat > 0.0) { col += envRadiance(P, R, 0.05) * (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coat * 0.6; }
+  if (emis > 0.0) {
+    let pulse = 0.9 + 0.1 * sin(G.misc.x * 2.2 + prm.mat2.w * 40.0);
+    col += base * (emis * pulse * (0.45 + 0.9 * pow(NoV, 1.6))) * mix(0.55, 1.0, G.misc.z);
+  }
+  var outc = display(col);
+  if (cam.pos.w > 0.5) { outc = mix(G.floorDisp.rgb, outc, exp(-P.y * 0.42)); }
+  return vec4f(outc, 1.0);
+}`;
+
+/* ------------------------------------------------------------- resources */
+const NPART = VPB*MAXB;
+const partBufs=[0,1].map(()=>device.createBuffer({size:NPART*32,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST}));
+const bodyBuf=device.createBuffer({size:MAXB*160,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST|GPUBufferUsage.COPY_SRC});
+const paramBuf=device.createBuffer({size:MAXB*176,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+const readBuf=device.createBuffer({size:MAXB*160,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+const simBuf=device.createBuffer({size:192,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const globBuf=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const camBuf=device.createBuffer({size:80,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const camMirBuf=device.createBuffer({size:80,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const SHADOW=2048;
+const shadowDepth=device.createTexture({size:[SHADOW,SHADOW],format:'depth32float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING});
+const shadowTint=device.createTexture({size:[SHADOW,SHADOW],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING});
+const shadowDepthView=shadowDepth.createView(), shadowTintView=shadowTint.createView();
+
+async function mod(code,label){
+  const m=device.createShaderModule({code,label});
+  const info=await m.getCompilationInfo();
+  for(const msg of info.messages) if(msg.type==='error') console.error(label+' WGSL '+msg.lineNum+':'+msg.linePos+' '+msg.message);
+  return m;
+}
+const [mBody,mPart,mShadow,mRender]=await Promise.all([mod(WGSL_BODYPASS,'bodypass'),mod(WGSL_PARTPASS,'partpass'),mod(WGSL_SHADOW,'shadow'),mod(WGSL_RENDER,'render')]);
+
+const C=GPUShaderStage.COMPUTE, VS=GPUShaderStage.VERTEX, FS=GPUShaderStage.FRAGMENT;
+const simLayout=device.createBindGroupLayout({entries:[
+  {binding:0,visibility:C,buffer:{type:'uniform'}},
+  {binding:1,visibility:C,buffer:{type:'read-only-storage'}},
+  {binding:2,visibility:C,buffer:{type:'storage'}},
+  {binding:3,visibility:C,buffer:{type:'storage'}},
+  {binding:4,visibility:C,buffer:{type:'read-only-storage'}},
+  {binding:5,visibility:C,buffer:{type:'read-only-storage'}}]});
+const simPL=device.createPipelineLayout({bindGroupLayouts:[simLayout]});
+const bodyPipe=device.createComputePipeline({layout:simPL,compute:{module:mBody,entryPoint:'main'}});
+const partPipe=device.createComputePipeline({layout:simPL,compute:{module:mPart,entryPoint:'main'}});
+const simBG=[0,1].map(i=>device.createBindGroup({layout:simLayout,entries:[
+  {binding:0,resource:{buffer:simBuf}},{binding:1,resource:{buffer:partBufs[i]}},{binding:2,resource:{buffer:partBufs[1-i]}},
+  {binding:3,resource:{buffer:bodyBuf}},{binding:4,resource:{buffer:paramBuf}},{binding:5,resource:{buffer:restBuf}}]}));
+
+const camLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:VS|FS,buffer:{type:'uniform'}}]});
+const sceneLayout=device.createBindGroupLayout({entries:[
+  {binding:0,visibility:VS|FS,buffer:{type:'uniform'}},
+  {binding:1,visibility:VS,buffer:{type:'read-only-storage'}},
+  {binding:2,visibility:VS,buffer:{type:'read-only-storage'}},
+  {binding:3,visibility:VS|FS,buffer:{type:'read-only-storage'}},
+  {binding:4,visibility:FS,buffer:{type:'read-only-storage'}},
+  {binding:5,visibility:FS,texture:{sampleType:'depth'}},
+  {binding:6,visibility:FS,sampler:{type:'comparison'}},
+  {binding:7,visibility:FS,texture:{sampleType:'float'}},
+  {binding:8,visibility:FS,sampler:{type:'filtering'}}]});
+const shadowLayout=device.createBindGroupLayout({entries:[
+  {binding:0,visibility:VS|FS,buffer:{type:'uniform'}},
+  {binding:1,visibility:VS,buffer:{type:'read-only-storage'}},
+  {binding:3,visibility:VS|FS,buffer:{type:'read-only-storage'}}]});
+const cmpSamp=device.createSampler({compare:'less',magFilter:'linear',minFilter:'linear'});
+const linSamp=device.createSampler({magFilter:'linear',minFilter:'linear',addressModeU:'clamp-to-edge',addressModeV:'clamp-to-edge'});
+const camBG=device.createBindGroup({layout:camLayout,entries:[{binding:0,resource:{buffer:camBuf}}]});
+const camMirBG=device.createBindGroup({layout:camLayout,entries:[{binding:0,resource:{buffer:camMirBuf}}]});
+const sceneBG=[0,1].map(i=>device.createBindGroup({layout:sceneLayout,entries:[
+  {binding:0,resource:{buffer:globBuf}},{binding:1,resource:{buffer:partBufs[i]}},{binding:2,resource:{buffer:restBuf}},
+  {binding:3,resource:{buffer:paramBuf}},{binding:4,resource:{buffer:bodyBuf}},{binding:5,resource:shadowDepthView},
+  {binding:6,resource:cmpSamp},{binding:7,resource:shadowTintView},{binding:8,resource:linSamp}]}));
+const shadowBG=[0,1].map(i=>device.createBindGroup({layout:shadowLayout,entries:[
+  {binding:0,resource:{buffer:globBuf}},{binding:1,resource:{buffer:partBufs[i]}},{binding:3,resource:{buffer:paramBuf}}]}));
+
+const MS=4;
+const renderPL=device.createPipelineLayout({bindGroupLayouts:[camLayout,sceneLayout]});
+const blend={color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}};
+function rp(vs,fs,o){return device.createRenderPipeline({layout:renderPL,vertex:{module:mRender,entryPoint:vs},
+  fragment:{module:mRender,entryPoint:fs,targets:[o.blend?{format,blend}:{format}]},
+  primitive:{topology:'triangle-list',cullMode:o.cull||'none'},
+  depthStencil:{format:'depth24plus',depthWriteEnabled:!!o.zwrite,depthCompare:o.zcmp||'less'},multisample:{count:MS}});}
+const pipeBg=rp('vsBg','fsBg',{zcmp:'always'});
+const pipeFloor=rp('vsFloor','fsFloor',{blend:true,zwrite:true,zcmp:'less-equal'});
+const pipeTankBack=rp('vsTank','fsTank',{blend:true,cull:'front'});
+const pipeTankFront=rp('vsTank','fsTank',{blend:true,cull:'back'});
+const pipeBody=rp('vsBody','fsBody',{zwrite:true,cull:'back'});
+const pipeBodyMir=rp('vsBody','fsBody',{zwrite:true,cull:'front'});
+const pipeShadow=device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[shadowLayout]}),
+  vertex:{module:mShadow,entryPoint:'vs'},fragment:{module:mShadow,entryPoint:'fs',targets:[{format:'rgba8unorm'}]},
+  primitive:{topology:'triangle-list',cullMode:'none'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less'}});
+
+/* ------------------------------------------------------------ world state */
+const tank={hw:2.4,H:8,hd:1.7};
+const cam={yaw:0.3,pitch:0.2,dist:20,target:[0,3,0],eye:[0,0,0],fovy:38*Math.PI/180,aspect:1,right:[1,0,0],up:[0,1,0],fwd:[0,0,-1]};
+const slots=new Array(MAXB).fill(null); let order=[]; let highest=0;
+const bodiesCPU=new Float32Array(MAXB*40); let rbBusy=false;
+const grabs=[null,null,null,null];
+const state={mat:0,grav:0,slow:false,night:false,boomT:0,time:0,nightK:0};
+const game={on:false,over:false,won:false,dialog:'',level:0,target:3,hw:2.4,room:5,hd:1.3,score:0,levelScore:0,best:0,held:-1,heldTier:0,nextTier:0,nextAt:0,
+  dropCount:0,aimX:0,aiming:false,pending:false,pendingT:0,dangerT:0,lastT:0,boomPos:null};
+try{game.best=+localStorage.getItem('wobble-lab-best')||0;game.level=+localStorage.getItem('wobble-lab-level')||0;}catch(e){}
+const GRAV=[{label:'down',g:-20},{label:'moon',g:-3.5},{label:'zero',g:0},{label:'up',g:20}];
+const countEl=document.getElementById('count');
+function updateCount(){const n=slots.filter(Boolean).length;countEl.textContent=n+' of '+MAXB+' blobs';highest=0;for(let i=0;i<MAXB;i++)if(slots[i])highest=i+1;}
+
+function writeParams(slot,active){
+  const b=slots[slot],f=new Float32Array(44);
+  if(b){const sh=SHAPES[b.shape],m=MATS[b.mat],ph=b.phys||m,s=b.scale;
+    f.set(sh.s,0);
+    f.set([sh.kind,sh.restOff,sh.count,active?1:0],4);
+    f.set([ph.omega,ph.beta,ph.damp,ph.fric],8);
+    f.set([s,ph.smooth,ph.dens*s*s*s*ph.omega*ph.omega,sh.vol0*s*s*s],12);
+    f.set([...b.color,b.pattern],16);
+    f.set([...b.color2,b.patScale],20);
+    f.set([m.rough,m.metal,m.trans,m.emis],24);
+    f.set([m.irid,m.coat,m.sss,b.seed],28);
+    for(let c=0;c<3;c++)for(let r=0;r<3;r++)f[32+c*4+r]=sh.aqqInv[c][r]/(s*s);
+  }
+  device.queue.writeBuffer(paramBuf,slot*176,f);
+}
+function spawn(shape,mat,o={}){
+  let slot=slots.indexOf(null);
+  if(slot<0){if(o.noEvict)return -1;slot=order.shift();for(let k=0;k<4;k++)if(grabs[k]&&grabs[k].body===slot)grabs[k]=null;}
+  const sh=SHAPES[shape],m=MATS[mat];
+  const s=o.scale||(0.86+Math.random()*0.38);
+  const up=GRAV[state.grav].g>0;
+  const pos=o.pos||[(Math.random()*2-1)*(tank.hw-1.0),up?1.2+Math.random():tank.H-1.1-Math.random()*0.8,(Math.random()*2-1)*(tank.hd-0.9)];
+  const q=randQuat(),R=quatToMat(q);
+  const vel=o.vel||[(Math.random()-.5)*2,up?3:-3,(Math.random()-.5)*1];
+  const ci=m.ci++%m.colors.length;
+  const b={shape,mat,scale:s,color:hex(o.color||m.colors[ci]),color2:o.color2?hex(o.color2):(m.colors2?hex(m.colors2[ci]):[1,1,1]),
+    pattern:o.pattern!==undefined?o.pattern:(m.pattern?(Math.random()<0.55?1:2):0),patScale:o.patScale||9+Math.random()*9,seed:Math.random(),
+    phys:o.phys,tier:o.tier,born:state.time};
+  const sq=o.squash||1;
+  slots[slot]=b;order=order.filter(x=>x!==slot);order.push(slot);
+  const pd=new Float32Array(VPB*8);
+  for(let i=0;i<sh.count;i++){const v=sh.verts[i],o8=i*8;
+    for(let r=0;r<3;r++)pd[o8+r]=pos[r]+(R[0][r]*v[0]+R[1][r]*v[1]+R[2][r]*v[2])*s*sq;
+    pd[o8+3]=1;pd[o8+4]=vel[0];pd[o8+5]=vel[1];pd[o8+6]=vel[2];}
+  device.queue.writeBuffer(partBufs[0],slot*VPB*32,pd);device.queue.writeBuffer(partBufs[1],slot*VPB*32,pd);
+  const bd=new Float32Array(40);
+  bd.set([pos[0],pos[1],pos[2],sh.rb*s],0);bd.set(q,12);
+  for(let c=0;c<3;c++){bd.set(R[c],16+c*4);bd.set([R[0][c],R[1][c],R[2][c]],28+c*4);}
+  device.queue.writeBuffer(bodyBuf,slot*160,bd);
+  bodiesCPU.set(bd,slot*40);
+  writeParams(slot,true);
+  updateCount();
+  return slot;
+}
+function removeBody(i){if(!slots[i])return;slots[i]=null;device.queue.writeBuffer(paramBuf,i*176,new Float32Array(44));order=order.filter(x=>x!==i);
+  for(let k=0;k<4;k++)if(grabs[k]&&grabs[k].body===i)grabs[k]=null;updateCount();}
+function clearAll(){for(let i=0;i<MAXB;i++){if(slots[i]){slots[i]=null;device.queue.writeBuffer(paramBuf,i*176,new Float32Array(44));}}order=[];for(let k=0;k<4;k++)grabs[k]=null;updateCount();}
+
+/* ------------------------------------------------------------ view + size */
+let msTex=null,depthTex=null,msView=null,depthView=null,renderScale=1,offTex=null;
+function resize(force){
+  const dpr=Math.min(window.devicePixelRatio||1,2)*renderScale;
+  const w=Math.max(2,Math.round(canvas.clientWidth*dpr)),h=Math.max(2,Math.round(canvas.clientHeight*dpr));
+  if(canvas.width===w&&canvas.height===h&&msTex&&force!==true)return;
+  canvas.width=w;canvas.height=h;
+  if(msTex){msTex.destroy();depthTex.destroy();}
+  msTex=device.createTexture({size:[w,h],format,sampleCount:MS,usage:GPUTextureUsage.RENDER_ATTACHMENT});
+  depthTex=device.createTexture({size:[w,h],format:'depth24plus',sampleCount:MS,usage:GPUTextureUsage.RENDER_ATTACHMENT});
+  msView=msTex.createView();depthView=depthTex.createView();
+  if(TEST){if(offTex)offTex.destroy();offTex=device.createTexture({size:[w,h],format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});}
+  cam.aspect=w/h;
+  const th=Math.tan(cam.fovy/2);
+  tank.hd=game.on?game.hd:1.7;
+  // keep the tank between the header and the tray
+  const ch=canvas.clientHeight||1;
+  const topPx=document.querySelector('.top').getBoundingClientRect().bottom+10;
+  const trayPx=document.querySelector('.tray').getBoundingClientRect().top-18;
+  const yTop=clamp(1-2*topPx/ch,0.2,0.95), yBot=clamp(2*trayPx/ch-1,0.15,0.95);
+  const needH=game.on?game.room+2.2:5.6;   // game levels size the tank; the camera zooms to fit it
+  const distW=((game.on?game.hw:2.4)+0.45)/(th*cam.aspect)+tank.hd;
+  const distH=(needH+0.8*yBot*tank.hd*th)/(th*(0.8*yBot+0.93*yTop));
+  cam.dist=Math.max(distW,distH);
+  tank.hw=game.on?game.hw:clamp(cam.dist*th*cam.aspect*0.7-0.4,2.4,5.2);
+  const ty=0.8*yBot*(cam.dist-tank.hd)*th;
+  tank.H=clamp(ty+0.93*yTop*cam.dist*th,game.on?needH:5.5,11);
+  cam.target=[0,ty,0];
+}
+new ResizeObserver(()=>resize()).observe(canvas);resize();
+
+function updateCamera(){
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  cam.eye=V.add(cam.target,V.mul([Math.sin(cam.yaw)*cp,sp,Math.cos(cam.yaw)*cp],cam.dist));
+  cam.fwd=V.norm(V.sub(cam.target,cam.eye));cam.right=V.norm(V.cross(cam.fwd,[0,1,0]));cam.up=V.cross(cam.right,cam.fwd);
+  const vp=m4mul(perspective(cam.fovy,cam.aspect,0.5,120),lookAt(cam.eye,cam.target,[0,1,0]));
+  const f=new Float32Array(20);f.set(vp,0);f.set([...cam.eye,0],16);device.queue.writeBuffer(camBuf,0,f);
+  const vm=new Float32Array(vp);vm[4]*=-1;vm[5]*=-1;vm[6]*=-1;vm[7]*=-1;
+  f.set(vm,0);f.set([cam.eye[0],-cam.eye[1],cam.eye[2],1],16);device.queue.writeBuffer(camMirBuf,0,f);
+}
+const LDIR=V.norm([-0.5,1.0,-0.32]);
+const lerp=(a,b,t)=>a.map((x,i)=>x+(b[i]-x)*t);
+const srgb=h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
+function updateGlobals(){
+  const k=state.nightK;
+  const cen=[0,tank.H*0.5,0],rad=Math.hypot(tank.hw,tank.H*0.5,tank.hd)+0.9;
+  const eye=V.add(cen,V.mul(LDIR,rad+3));
+  const far=2*rad+6+tank.H*0.9, near=1;
+  const lvp=m4mul(ortho(-rad,rad,-rad,rad,near,far),lookAt(eye,cen,[0,0,-1]));
+  const f=new Float32Array(64);f.set(lvp,0);
+  f.set([...LDIR,far-near],16);
+  f.set([...lerp([2.75,2.6,2.4],[0.16,0.2,0.3],k),lerp([1],[0.1],k)[0]],20);
+  f.set([...lerp([0.5,0.62,0.8],[0.012,0.018,0.03],k),lerp([0.38],[0.95],k)[0]],24);
+  f.set([...lerp([0.95,0.95,0.93],[0.03,0.04,0.055],k),0],28);
+  f.set([...lerp([0.8,0.82,0.83],[0.2,0.23,0.25],k),lerp([0.16],[0.5],k)[0]],32);
+  f.set([...lerp(srgb('#c9d7d6'),srgb('#070d10'),k),1],36);
+  f.set([...lerp(srgb('#eef1ec'),srgb('#162125'),k),1],40);
+  f.set([...lerp(srgb('#e9ece8'),srgb('#10181b'),k),1],44);
+  f.set([...lerp([0.09,0.16,0.17],[0.8,0.92,0.95],k),lerp([0.5],[0.42],k)[0]],48);
+  f.set([state.time,highest,k,2*rad/SHADOW],52);
+  f.set([tank.hw,tank.H,tank.hd,SHADOW],56);
+  f.set([canvas.width,canvas.height,1/canvas.width,1/canvas.height],60);
+  device.queue.writeBuffer(globBuf,0,f);
+}
+function updateSim(dt){
+  const f=new Float32Array(48);
+  f.set([0,GRAV[state.grav].g,0,dt],0);
+  f.set([tank.hw,tank.H,tank.hd,highest],4);
+  const up=GRAV[state.grav].g>0;
+  const bp=game.on&&game.boomPos?game.boomPos:[0,up?tank.H-0.3:0.3,0];
+  f.set([bp[0],bp[1],bp[2],state.boomT>0?(game.on?70:150):0],8);
+  f.set([1,state.time,game.on?30:0,0],12);
+  for(let k=0;k<4;k++){const g=grabs[k];
+    if(g&&slots[g.body]){f.set([...g.local,g.body],16+k*4);f.set([...g.target,g.radius],32+k*4);}
+    else f.set([0,0,0,-1],16+k*4);}
+  device.queue.writeBuffer(simBuf,0,f);
+}
+
+/* ------------------------------------------------------------- pointers */
+function rayFrom(ev){
+  const r=canvas.getBoundingClientRect();
+  const nx=((ev.clientX-r.left)/r.width)*2-1, ny=1-((ev.clientY-r.top)/r.height)*2;
+  const th=Math.tan(cam.fovy/2);
+  return V.norm(V.add(cam.fwd,V.add(V.mul(cam.right,nx*th*cam.aspect),V.mul(cam.up,ny*th))));
+}
+function pick(ro,rd){
+  let best=null,loose=null;
+  for(let b=0;b<MAXB;b++){
+    const body=slots[b];if(!body)continue;
+    const o=b*40,c=[bodiesCPU[o],bodiesCPU[o+1],bodiesCPU[o+2]],rb=bodiesCPU[o+3];
+    if(!(rb>0))continue;
+    const oc=V.sub(ro,c),bq=V.dot(oc,rd),d2=V.dot(oc,oc)-bq*bq,h=rb*rb-d2;
+    if(h<0||-bq<0)continue;
+    const sh=SHAPES[body.shape],s=body.scale;
+    const toLocal=p=>{const d=V.sub(p,c);return [0,1,2].map(r=>bodiesCPU[o+28+r]*d[0]+bodiesCPU[o+32+r]*d[1]+bodiesCPU[o+36+r]*d[2]);};
+    let t=Math.max(-bq-Math.sqrt(h),0);const tEnd=-bq+Math.sqrt(h);let hit=false,pl=null;
+    for(let k=0;k<56&&t<tEnd;k++){pl=toLocal(V.add(ro,V.mul(rd,t)));const d=s*sdfUnit(V.mul(pl,1/s),sh.kind,sh.s);if(d<0.012){hit=true;break;}t+=Math.max(d*0.7,0.012);}
+    if(hit){if(!best||t<best.t)best={body:b,t,local:pl};}
+    else if(d2<rb*rb*0.6){const tc=-bq;if(!loose||tc<loose.t)loose={body:b,t:tc,local:V.mul(toLocal(V.add(ro,V.mul(rd,tc))),0.6)};}
+  }
+  return best||loose;
+}
+const pointers=new Map();
+canvas.addEventListener('pointerdown',ev=>{
+  canvas.setPointerCapture(ev.pointerId);
+  if(game.on){gameDown(ev);return;}
+  const rd=rayFrom(ev),hit=pick(cam.eye,rd);
+  if(hit){
+    let k=grabs.findIndex(g=>!g);
+    if(k>=0){
+      const point=V.add(cam.eye,V.mul(rd,hit.t));
+      grabs[k]={body:hit.body,local:hit.local,target:point,radius:0.5*slots[hit.body].scale,plane:point,normal:cam.fwd.slice()};
+      pointers.set(ev.pointerId,{grab:k});return;
+    }
+  }
+  pointers.set(ev.pointerId,{orbit:true,x:ev.clientX,y:ev.clientY});
+});
+canvas.addEventListener('pointermove',ev=>{
+  if(game.on){gameMove(ev);return;}
+  const p=pointers.get(ev.pointerId);if(!p)return;
+  if(p.orbit){cam.yaw=clamp(cam.yaw-(ev.clientX-p.x)*0.005,-0.85,0.85);cam.pitch=clamp(cam.pitch+(ev.clientY-p.y)*0.004,0.04,0.7);p.x=ev.clientX;p.y=ev.clientY;return;}
+  const g=grabs[p.grab];if(!g)return;
+  const rd=rayFrom(ev),den=V.dot(rd,g.normal);if(Math.abs(den)<1e-4)return;
+  const t=V.dot(V.sub(g.plane,cam.eye),g.normal)/den;
+  const x=V.add(cam.eye,V.mul(rd,t));
+  g.target=[clamp(x[0],-tank.hw+0.15,tank.hw-0.15),clamp(x[1],0.2,tank.H-0.2),clamp(x[2],-tank.hd+0.15,tank.hd-0.15)];
+});
+function release(ev){if(game.on){gameUp(ev);return;}const p=pointers.get(ev.pointerId);if(!p)return;if(p.grab!==undefined)grabs[p.grab]=null;pointers.delete(ev.pointerId);}
+canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ------------------------------------------------------------------- ui */
+document.getElementById('mats').addEventListener('click',e=>{const b=e.target.closest('.mat');if(!b)return;state.mat=+b.dataset.m;
+  document.querySelectorAll('.mat').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));});
+document.getElementById('shapes').addEventListener('click',e=>{const b=e.target.closest('.shape');if(b)spawn(+b.dataset.s,state.mat);});
+document.getElementById('btnBoom').addEventListener('click',()=>{state.boomT=0.1;});
+document.getElementById('btnGrav').addEventListener('click',()=>{state.grav=(state.grav+1)%GRAV.length;document.getElementById('gravState').textContent=GRAV[state.grav].label;});
+document.getElementById('btnSlow').addEventListener('click',e=>{state.slow=!state.slow;e.currentTarget.setAttribute('aria-pressed',state.slow);});
+document.getElementById('btnNight').addEventListener('click',e=>{state.night=!state.night;e.currentTarget.setAttribute('aria-pressed',state.night);root.classList.toggle('night',state.night);});
+document.getElementById('btnClear').addEventListener('click',clearAll);
+
+/* ------------------------------------------------------------------ game */
+// Drop blobs; two of the same size fuse into the next one up. Each level asks for one goal blob, and the pile must stay under the line.
+const TIERS=[
+  {r:.30,mat:0,color:'#ff2463'},{r:.38,mat:0,color:'#ff8a12'},{r:.47,mat:0,color:'#ffcf0f'},{r:.57,mat:0,color:'#72d91c'},
+  {r:.68,mat:0,color:'#1f74ff'},{r:.80,mat:1,color:'#12a89a',color2:'#f6f1e4',pattern:1},{r:.93,mat:3,color:'#f3eee8'},
+  {r:1.07,mat:4,color:'#a25bff'},{r:1.22,mat:2,color:'#ffcb69'},
+  {r:.42,mat:5,color:'#8e9aa8',dud:true}];
+const DUD=9, TOP=8;
+// goal tier, tank half width, room under the line, and how often a dud turns up
+const LEVELS=[
+  {target:3,hw:1.2,room:1.7},{target:4,hw:1.4,room:1.9},{target:5,hw:1.6,room:2.6},{target:6,hw:1.9,room:3.0},
+  {target:7,hw:2.2,room:3.7},{target:8,hw:2.4,room:4.3},{target:8,hw:2.4,room:4.1,dud:7},{target:8,hw:2.3,room:3.9,dud:5}];
+TIERS.forEach((T,i)=>{const c=T.color;
+  T.css=i===5?'repeating-linear-gradient(115deg,#12a89a 0 22%,#f6f1e4 22% 38%)'
+    :i===6?'radial-gradient(circle at 34% 28%,#fff 0 12%,#ffe3f1 30%,#d6ecff 58%,#e8dcff 78%,#bfc7d6 100%)'
+    :i===7?'radial-gradient(circle at 50% 50%,#f1e6ff 0 14%,#a25bff 52%,#5a1fb8 100%)'
+    :i===8?'linear-gradient(175deg,#fff6dc 0%,#e2b04a 34%,#6b4a12 52%,#f0cd7a 60%,#fff3cf 100%)'
+    :i===9?'radial-gradient(circle at 36% 30%,#c3ccd6 0 18%,#8e9aa8 62%,#667180 100%)'
+    :`radial-gradient(circle at 34% 28%,#fff 0 7%,color-mix(in srgb,${c} 55%,#fff) 14%,${c} 50%,color-mix(in srgb,${c} 62%,#000) 100%)`;});
+const el=id=>document.getElementById(id);
+const aimEl=el('aim'),dangerEl=el('danger'),overEl=el('over'),popsEl=el('pops');
+const ladderEls=[];
+{const L=el('ladder');for(let i=0;i<=TOP;i++){const d=document.createElement('i');const px=Math.round(11+i*2.4);d.style.cssText=`width:${px}px;height:${px}px;background:${TIERS[i].css}`;L.appendChild(d);ladderEls.push(d);}}
+const holdY=t=>tank.H-0.35-TIERS[t].r, lineY=()=>game.room;
+function pickNext(){
+  const L=LEVELS[game.level];
+  if(L.dud&&game.dropCount>0&&game.dropCount%L.dud===0)return DUD;
+  const w=[5,4,3,2].slice(0,Math.max(1,Math.min(3,L.target-2))+1);
+  let r=Math.random()*w.reduce((x,y)=>x+y,0);
+  for(let i=0;i<w.length;i++){r-=w[i];if(r<0)return i;}
+  return 0;
+}
+function project(p){updateCamera();const d=V.sub(p,cam.eye),z=V.dot(d,cam.fwd),th=Math.tan(cam.fovy/2);const r=canvas.getBoundingClientRect();
+  return [r.left+(V.dot(d,cam.right)/(z*th*cam.aspect)*0.5+0.5)*r.width, r.top+(0.5-V.dot(d,cam.up)/(z*th)*0.5)*r.height];}
+function spawnTier(tier,pos,o={}){const T=TIERS[tier],s=T.r/0.62;
+  return spawn(0,T.mat,{scale:s,pos,vel:o.vel||[0,0,0],color:T.color,color2:T.color2,pattern:T.pattern||0,patScale:14,tier,noEvict:true,squash:o.squash,
+    phys:{omega:125,beta:.45,damp:5,fric:.35,smooth:.3,dens:Math.pow(s,-1.5)}});}
+function setSwatch(e,tier,px){e.style.cssText=`width:${px}px;height:${px}px;background:${TIERS[tier].css}`;}
+function updateHud(){
+  const L=LEVELS[game.level];
+  el('title').textContent=game.on?'Level '+(game.level+1):'Wobbledly';
+  el('score').textContent=game.score;el('best').textContent=game.best;
+  setSwatch(el('nextSw'),game.nextTier,game.nextTier===DUD?22:Math.round(16+game.nextTier*4));
+  setSwatch(el('goalSw'),game.target,26);
+  ladderEls.forEach((d,i)=>{d.classList.toggle('off',i>game.target);d.classList.toggle('goal',i===game.target);});
+  el('gameHint').textContent=L.dud?'Grey duds never merge. A merge right next to one clears it.':'Drag to aim, let go to drop. Merge up to the ringed blob.';
+}
+function bumpBest(){if(game.score>game.best){game.best=game.score;try{localStorage.setItem('wobble-lab-best',game.best);}catch(e){}}}
+let actx=null,soundOn=true;
+const music={on:true,timer:null,gain:null,step:0,next:0};
+try{soundOn=localStorage.getItem('wobbledly-sound')!=='0';music.on=localStorage.getItem('wobbledly-music')!=='0';}catch(e){}
+el('btnSound').setAttribute('aria-pressed',soundOn);el('btnMusic').setAttribute('aria-pressed',music.on);
+function unlockAudio(){
+  if(!soundOn&&!music.on)return;
+  try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended')actx.resume().then(musicStart,()=>{});else musicStart();}catch(e){}
+}
+// Background music is generated live: an eight-bar loop of bass, marimba arpeggio, a bell melody and a soft shaker.
+const mtof=m=>440*Math.pow(2,(m-69)/12);
+const SONG={
+  chords:[[48,60,64,67,72],[45,57,60,64,69],[41,53,57,60,65],[43,55,59,62,67]],   // C, Am, F, G: bass note, then arpeggio notes
+  arp:[1,3,2,3,4,3,2,3],
+  lead:[76,0,79,0,76,0,72,0, 74,0,72,0,69,0,0,0, 72,0,74,0,77,0,76,0, 74,0,0,71,74,0,0,0,
+        79,0,76,0,84,0,79,0, 81,0,79,0,76,0,0,72, 77,0,76,0,72,0,69,0, 71,0,74,0,79,0,0,0]};
+let noiseBuf=null;
+function voice(type,f,t,len,vol){const o=actx.createOscillator(),g=actx.createGain();o.type=type;o.frequency.value=f;
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+  o.connect(g);g.connect(music.gain);o.start(t);o.stop(t+len+0.03);}
+function shaker(t,vol){
+  if(!noiseBuf){noiseBuf=actx.createBuffer(1,Math.floor(actx.sampleRate*0.06),actx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}
+  const n=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();n.buffer=noiseBuf;f.type='highpass';f.frequency.value=6500;
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);n.connect(f);f.connect(g);g.connect(music.gain);n.start(t);}
+function musicStep(i,t,dur){
+  const bar=(i>>3)&3,s=i&7,ch=SONG.chords[bar];
+  if(s===0||s===4){voice('sine',mtof(ch[0]),t,dur*3.2,0.3);voice('triangle',mtof(ch[0]+12),t,dur*2.4,0.07);}   // the upper octave keeps the bass audible on phone speakers
+  if(s===3)voice('sine',mtof(ch[0]+7),t,dur*0.9,0.16);
+  voice('triangle',mtof(ch[SONG.arp[s]]+(i>=32&&s>3?12:0)),t,dur*1.5,0.11);
+  const m=SONG.lead[i];
+  if(m){voice('sine',mtof(m),t,dur*2.6,0.15);voice('sine',mtof(m+12),t,dur*1.1,0.035);}
+  if(s&1)shaker(t,0.035);
+}
+function musicTick(){
+  if(!actx||actx.state!=='running'||!music.gain)return;
+  const dur=30/(94+(game.on?game.level*3:0));   // eighth notes; the tempo creeps up with the level
+  if(music.next<actx.currentTime)music.next=actx.currentTime+0.05;
+  while(music.next<actx.currentTime+0.3){
+    try{musicStep(music.step,music.next+((music.step&1)?dur*0.14:0),dur);}catch(e){}
+    music.next+=dur;music.step=(music.step+1)%64;
+  }
+}
+function musicStart(){
+  if(!music.on||music.timer||!actx||actx.state!=='running')return;
+  music.gain=actx.createGain();music.gain.gain.setValueAtTime(0.0001,actx.currentTime);
+  music.gain.gain.exponentialRampToValueAtTime(0.55,actx.currentTime+1.5);music.gain.connect(actx.destination);
+  music.step=0;music.next=actx.currentTime+0.12;music.timer=setInterval(musicTick,80);
+}
+function musicStop(){
+  if(!music.timer)return;clearInterval(music.timer);music.timer=null;
+  const g=music.gain;music.gain=null;
+  try{g.gain.cancelScheduledValues(actx.currentTime);g.gain.setTargetAtTime(0.0001,actx.currentTime,0.08);setTimeout(()=>{try{g.disconnect();}catch(e){}},700);}catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{if(!actx)return;
+  if(document.hidden){musicStop();try{actx.suspend();}catch(e){}}else if(soundOn||music.on){try{actx.resume().then(musicStart,()=>{});}catch(e){}}});
+window.addEventListener('pointerup',unlockAudio,true);
+function tone(f,at,len,vol){const t=actx.currentTime+at,o=actx.createOscillator(),g=actx.createGain();
+  o.type='sine';o.frequency.setValueAtTime(f*1.7,t);o.frequency.exponentialRampToValueAtTime(f,t+0.09);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.012);g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+  o.connect(g);g.connect(actx.destination);o.start(t);o.stop(t+len+0.02);}
+function blip(tier){if(!soundOn||!actx||actx.state!=='running')return;try{tone(560*Math.pow(0.87,tier),0,0.24,0.2);}catch(e){}}
+function fanfare(){if(!soundOn||!actx||actx.state!=='running')return;try{[392,494,587,784].forEach((f,i)=>tone(f,i*0.11,0.3,0.16));}catch(e){}}
+function popAt(world,text){const p=project(world),d=document.createElement('span');d.className='pop';d.textContent=text;d.style.left=p[0]+'px';d.style.top=p[1]+'px';
+  popsEl.appendChild(d);setTimeout(()=>d.remove(),950);}
+function startLevel(n,score){
+  n=clamp(n|0,0,LEVELS.length-1);const L=LEVELS[n];
+  Object.assign(game,{level:n,target:L.target,hw:L.hw,room:L.room,hd:TIERS[L.target].r+0.1,score,levelScore:score,over:false,won:false,dialog:'',
+    held:-1,aimX:0,aiming:false,pending:false,dangerT:0,dropCount:0,boomPos:null});
+  try{localStorage.setItem('wobble-lab-level',n);}catch(e){}
+  clearAll();state.boomT=0;resize(true);
+  game.lastT=state.time;game.nextTier=pickNext();game.nextAt=state.time+0.3;
+  overEl.hidden=true;dangerEl.classList.remove('hot');
+  spawnTier(0,[-L.hw*0.45,0.6,0]);spawnTier(1,[L.hw*0.45,0.7,0]);
+  updateHud();updateOverlays();
+}
+function showDialog(kind){
+  const last=game.level>=LEVELS.length-1,note=el('overNote');
+  el('overT').textContent=kind==='lost'?'The tank overflowed':last?'You cleared every level':'Level '+(game.level+1)+' cleared';
+  el('overScore').textContent=game.score;el('overBest').textContent=game.best;
+  note.textContent='';
+  if(kind==='lost')note.textContent='The pile sat over the line too long.';
+  else if(last)note.textContent='All '+LEVELS.length+' levels done.';
+  else{const N=LEVELS[game.level+1],sw=document.createElement('i');sw.style.background=TIERS[N.target].css;
+    note.append('Next goal ',sw,N.dud?' with duds in the way':N.hw>LEVELS[game.level].hw?' in a bigger tank':' with less room');}
+  el('btnAgain').textContent=kind==='lost'?'Try again':last?'Play from level 1':'Next level';
+  el('btnAlt').hidden=!(kind==='lost'&&game.level>0);
+  game.dialog=kind;overEl.hidden=false;
+}
+function endGame(){game.over=true;game.aiming=false;showDialog('lost');}
+function winLevel(mid){
+  game.won=true;game.aiming=false;
+  if(game.held>=0){removeBody(game.held);game.held=-1;}
+  game.score+=100*(game.level+1);bumpBest();updateHud();
+  game.boomPos=mid;state.boomT=0.12;fanfare();
+  const lv=game.level;setTimeout(()=>{if(game.on&&game.won&&game.level===lv)showDialog('won');},1100);
+}
+function drop(){if(game.held<0)return;slots[game.held].born=state.time;grabs[3]=null;game.held=-1;game.pending=false;game.nextAt=state.time+0.55;}
+function merge(i,j){
+  const tier=slots[i].tier,oi=i*40,oj=j*40;
+  const mid=[0,1,2].map(k=>(bodiesCPU[oi+k]+bodiesCPU[oj+k])/2),vel=[0,1,2].map(k=>(bodiesCPU[oi+4+k]+bodiesCPU[oj+4+k])/2||0);
+  removeBody(i);removeBody(j);
+  let pts=(tier+1)*(tier+2),rn=TIERS[tier].r,made=-1;
+  if(tier<TOP){made=tier+1;rn=TIERS[made].r;
+    spawnTier(made,[clamp(mid[0],-tank.hw+rn,tank.hw-rn),Math.max(mid[1],rn*0.8),clamp(mid[2],-tank.hd+Math.min(rn,tank.hd),tank.hd-Math.min(rn,tank.hd))],{vel,squash:0.62});}
+  else pts=200;   // two of the biggest cancel out
+  for(let k=0;k<MAXB;k++){   // duds touching the merge are cleared
+    const b=slots[k];if(!b||b.tier!==DUD||k===game.held)continue;const o=k*40;
+    if(Math.hypot(bodiesCPU[o]-mid[0],bodiesCPU[o+1]-mid[1],bodiesCPU[o+2]-mid[2])<(rn+TIERS[DUD].r)*1.15){removeBody(k);pts+=10;}
+  }
+  game.score+=pts;bumpBest();
+  popAt(mid,'+'+pts);blip(tier);updateHud();
+  if(made===game.target)winLevel(mid);
+}
+function gameTick(){
+  if(!game.on)return;
+  const t=state.time,dt=clamp(t-game.lastT,0,0.1);game.lastT=t;
+  if(game.over||game.won)return;
+  if(game.held<0&&t>=game.nextAt){
+    const tier=game.nextTier,r=TIERS[tier].r;
+    game.aimX=clamp(game.aimX,-tank.hw+r+0.05,tank.hw-r-0.05);
+    const slot=spawnTier(tier,[game.aimX,holdY(tier),0]);
+    if(slot<0){endGame();return;}
+    game.held=slot;game.heldTier=tier;game.pending=false;game.dropCount++;
+    grabs[3]={body:slot,local:[0,0,0],target:[game.aimX,holdY(tier),0],radius:50};
+    game.nextTier=pickNext();updateHud();
+  }
+  if(game.held>=0){
+    const r=TIERS[game.heldTier].r;
+    game.aimX=clamp(game.aimX,-tank.hw+r+0.05,tank.hw-r-0.05);
+    grabs[3].target=[game.aimX,holdY(game.heldTier),0];
+    if(game.pending&&(Math.abs(bodiesCPU[game.held*40]-game.aimX)<0.1||t-game.pendingT>0.35))drop();
+  }
+  const live=[];
+  for(let i=0;i<MAXB;i++){const b=slots[i];if(b&&b.tier!==undefined&&i!==game.held&&t-b.born>0.25)live.push(i);}
+  // one merge per tick; chains carry on next frame
+  scan:for(let a=0;a<live.length;a++){
+    const i=live[a],tier=slots[i].tier;if(tier===DUD)continue;
+    const r=TIERS[tier].r,oi=i*40;
+    for(let b=a+1;b<live.length;b++){
+      const j=live[b];if(slots[j].tier!==tier)continue;
+      const oj=j*40;
+      if(Math.hypot(bodiesCPU[oi]-bodiesCPU[oj],bodiesCPU[oi+1]-bodiesCPU[oj+1],bodiesCPU[oi+2]-bodiesCPU[oj+2])<2*r*1.03){merge(i,j);break scan;}
+    }
+  }
+  if(game.won)return;
+  let danger=false;const ly=lineY();
+  for(const i of live){
+    const b=slots[i],o=i*40;
+    if(!b||b.tier===undefined||t-b.born<1.3)continue;
+    if(bodiesCPU[o+1]+TIERS[b.tier].r*0.85>ly&&Math.hypot(bodiesCPU[o+4],bodiesCPU[o+5],bodiesCPU[o+6])<1.5){danger=true;break;}
+  }
+  game.dangerT=danger?game.dangerT+dt:0;
+  dangerEl.classList.toggle('hot',game.dangerT>0.25);
+  if(game.dangerT>1.6)endGame();
+}
+function setLine(e,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];e.style.left=a[0]+'px';e.style.top=a[1]+'px';e.style.width=Math.hypot(dx,dy)+'px';e.style.transform='rotate('+Math.atan2(dy,dx)+'rad)';}
+function updateOverlays(){
+  if(!game.on)return;
+  const ly=lineY();setLine(dangerEl,project([-tank.hw,ly,tank.hd]),project([tank.hw,ly,tank.hd]));
+  const show=game.held>=0&&!game.over&&!game.won;aimEl.style.opacity=show?'':'0';
+  if(show)setLine(aimEl,project([game.aimX,holdY(game.heldTier)-TIERS[game.heldTier].r,0]),project([game.aimX,0,0]));
+}
+function aimFrom(ev){const rd=rayFrom(ev);if(Math.abs(rd[2])<1e-4)return;const t=-cam.eye[2]/rd[2];game.aimX=cam.eye[0]+rd[0]*t;}
+function gameDown(ev){unlockAudio();if(game.over||game.won)return;game.aiming=true;aimFrom(ev);}
+function gameMove(ev){if(game.aiming)aimFrom(ev);}
+function gameUp(ev){if(!game.aiming)return;game.aiming=false;if(game.held>=0&&!game.over&&!game.won){game.pending=true;game.pendingT=state.time;}}
+function openSandbox(){
+  const opening=[[0,0],[2,0],[1,1],[0,2],[3,3],[2,4],[4,5],[1,0],[0,1],[3,0]];
+  opening.forEach(([s,m],i)=>{const col=i%3,rowY=tank.H-1.0-Math.floor(i/3)*1.5;
+    spawn(s,m,{pos:[(col-1)*1.45+(Math.random()-.5)*0.3,Math.max(1.2,rowY),(Math.random()-.5)*1.2]});});
+}
+function setMode(on){
+  game.on=on;root.classList.toggle('game',on);
+  clearAll();pointers.clear();
+  state.grav=0;el('gravState').textContent=GRAV[0].label;state.slow=false;el('btnSlow').setAttribute('aria-pressed','false');state.boomT=0;
+  overEl.hidden=true;game.won=false;game.over=false;
+  if(on){cam.yaw=0;cam.pitch=0.17;startLevel(game.level,0);}
+  else{cam.yaw=0.3;cam.pitch=0.2;el('title').textContent='Wobbledly';resize(true);openSandbox();}
+  updateOverlays();
+}
+el('btnPlay').addEventListener('click',()=>{unlockAudio();setMode(true);});
+el('btnSandbox').addEventListener('click',()=>setMode(false));
+el('btnRestart').addEventListener('click',()=>{unlockAudio();startLevel(game.level,game.levelScore);});
+el('btnAgain').addEventListener('click',()=>{unlockAudio();
+  if(game.dialog==='lost')startLevel(game.level,game.levelScore);
+  else if(game.level>=LEVELS.length-1)startLevel(0,0);
+  else startLevel(game.level+1,game.score);});
+el('btnAlt').addEventListener('click',()=>{unlockAudio();startLevel(0,0);});
+el('btnSound').addEventListener('click',e=>{soundOn=!soundOn;e.currentTarget.setAttribute('aria-pressed',soundOn);try{localStorage.setItem('wobbledly-sound',soundOn?'1':'0');}catch(x){}if(soundOn)unlockAudio();});
+el('btnMusic').addEventListener('click',e=>{music.on=!music.on;e.currentTarget.setAttribute('aria-pressed',music.on);try{localStorage.setItem('wobbledly-music',music.on?'1':'0');}catch(x){}
+  if(music.on)unlockAudio();else musicStop();});
+
+/* --------------------------------------------------------------- frames */
+let cur=0;
+const H_STEP=1/360;let hStep=H_STEP;
+function simulate(enc,nsub,dt){
+  updateSim(dt);
+  const pass=enc.beginComputePass();
+  for(let s=0;s<nsub;s++){
+    pass.setBindGroup(0,simBG[cur]);
+    pass.setPipeline(bodyPipe);pass.dispatchWorkgroups(MAXB);
+    pass.setPipeline(partPipe);pass.dispatchWorkgroups(NPART/64);
+    cur^=1;
+  }
+  pass.end();
+}
+function drawBodies(pass){for(let b=0;b<MAXB;b++){const body=slots[b];if(!body)continue;const sh=SHAPES[body.shape];pass.drawIndexed(sh.idx.length,1,sh.idxOff,0,b);}}
+function render(enc){
+  updateCamera();updateGlobals();
+  const sp=enc.beginRenderPass({colorAttachments:[{view:shadowTintView,clearValue:{r:1,g:1,b:1,a:1},loadOp:'clear',storeOp:'store'}],
+    depthStencilAttachment:{view:shadowDepthView,depthClearValue:1,depthLoadOp:'clear',depthStoreOp:'store'}});
+  sp.setPipeline(pipeShadow);sp.setBindGroup(0,shadowBG[cur]);sp.setIndexBuffer(indexBuf,'uint16');drawBodies(sp);sp.end();
+  const mp=enc.beginRenderPass({colorAttachments:[{view:msView,resolveTarget:(TEST?offTex:ctx.getCurrentTexture()).createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:'clear',storeOp:'discard'}],
+    depthStencilAttachment:{view:depthView,depthClearValue:1,depthLoadOp:'clear',depthStoreOp:'discard'}});
+  mp.setIndexBuffer(indexBuf,'uint16');
+  mp.setBindGroup(0,camBG);mp.setBindGroup(1,sceneBG[cur]);
+  mp.setPipeline(pipeBg);mp.draw(3);
+  mp.setBindGroup(0,camMirBG);mp.setPipeline(pipeBodyMir);drawBodies(mp);
+  mp.setBindGroup(0,camBG);
+  mp.setPipeline(pipeFloor);mp.draw(6);
+  mp.setPipeline(pipeTankBack);mp.draw(30);
+  mp.setPipeline(pipeBody);drawBodies(mp);
+  mp.setPipeline(pipeTankFront);mp.draw(30);
+  mp.end();
+}
+function readback(enc){
+  if(rbBusy)return false;
+  enc.copyBufferToBuffer(bodyBuf,0,readBuf,0,MAXB*160);return true;
+}
+function afterSubmit(didCopy){
+  if(!didCopy)return;rbBusy=true;
+  readBuf.mapAsync(GPUMapMode.READ).then(()=>{bodiesCPU.set(new Float32Array(readBuf.getMappedRange()));readBuf.unmap();rbBusy=false;},()=>{rbBusy=false;});
+}
+let last=performance.now(),acc=0,slowAvg=16,frames=0;
+function frame(now){
+  let fdt=(now-last)/1000;last=now;
+  if(fdt<0.2){slowAvg+=(fdt*1000-slowAvg)*0.05;}
+  fdt=Math.min(fdt,1/20);
+  acc+=fdt;let nsub=Math.min(Math.floor(acc/hStep),10);acc-=nsub*hStep;if(acc>hStep*2)acc=0;
+  const scale=state.slow?0.16:1;
+  const dt=hStep*scale;
+  state.time+=nsub*dt;
+  state.nightK+=((state.night?1:0)-state.nightK)*Math.min(1,fdt*5);
+  resize();
+  gameTick();updateOverlays();
+  const enc=device.createCommandEncoder();
+  if(nsub>0)simulate(enc,nsub,dt);
+  if(state.boomT>0)state.boomT-=nsub*dt;
+  const copied=readback(enc);
+  render(enc);
+  device.queue.submit([enc.finish()]);
+  afterSubmit(copied);
+  if(++frames%90===0&&slowAvg>25){if(renderScale>0.6)renderScale-=0.15;else hStep=1/240;slowAvg=16;}   // ease off on slow devices
+  requestAnimationFrame(frame);
+}
+
+setMode(true);   // open on the game; the sandbox is one tap away
+
+// debug hook: advance the simulation without drawing
+window.__wl={music,get actx(){return actx;},project,game,TIERS,LEVELS,setMode,spawnTier,startLevel,gameTick,async play(n){for(let i=0;i<n;i++){await this.advance(1);gameTick();}updateOverlays();},
+  get frames(){return frames;},get lost(){return lostMsg;},state,spawn,cam,bodiesCPU,slots,grabs,tank,
+  async advance(n,sub=6,scale=1){for(let i=0;i<n;i++){const enc=device.createCommandEncoder();simulate(enc,sub,H_STEP*scale);if(state.boomT>0)state.boomT-=sub*H_STEP*scale;device.queue.submit([enc.finish()]);state.time+=sub*H_STEP*scale;}
+    const enc=device.createCommandEncoder();enc.copyBufferToBuffer(bodyBuf,0,readBuf,0,MAXB*160);device.queue.submit([enc.finish()]);
+    await readBuf.mapAsync(GPUMapMode.READ);bodiesCPU.set(new Float32Array(readBuf.getMappedRange()));readBuf.unmap();},
+  async capture(){state.nightK=state.night?1:0;resize();const w=canvas.width,h=canvas.height,bpr=Math.ceil(w*4/256)*256;
+    const buf=device.createBuffer({size:bpr*h,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    const enc=device.createCommandEncoder();render(enc);enc.copyTextureToBuffer({texture:offTex},{buffer:buf,bytesPerRow:bpr},[w,h]);device.queue.submit([enc.finish()]);
+    await buf.mapAsync(GPUMapMode.READ);const src=new Uint8Array(buf.getMappedRange());const img=ctx2d.createImageData(w,h);
+    for(let y=0;y<h;y++)img.data.set(src.subarray(y*bpr,y*bpr+w*4),y*w*4);ctx2d.putImageData(img,0,0);buf.unmap();buf.destroy();}};
+if(!TEST)requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
