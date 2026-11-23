@@ -78,12 +78,15 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){#danger.hot{animation:none}.pop{animation-duration:.5s}}
 .brand h1{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:.2px;line-height:1.05}
 .brand p{margin:0;font-size:12px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
-.acts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;pointer-events:auto;order:3;flex-basis:100%}
-.pill{height:32px;padding:0 12px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .12s ease,background .2s}
+.acts{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;pointer-events:auto;order:3;flex-basis:100%}
+.pill{height:32px;padding:0 9px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .12s ease,background .2s}
 .pill:active{transform:scale(.94)}
 .pill b{font-weight:600;color:var(--accent)}
 .pill[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:transparent}
 .pill.boom{background:var(--accent);color:#fff;border-color:transparent}
+.pill.help{width:30px;padding:0;justify-content:center}
+.over a{color:var(--accent);font-weight:600}
+.over p.cred{font-size:15px;color:var(--ink)}
 
 .tray{position:fixed;left:12px;right:12px;bottom:12px;margin:0 auto;max-width:460px;padding:8px 12px 10px;border-radius:24px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:8px}
 .hint{margin:0;font-size:12px;font-weight:500;color:var(--muted);text-align:center;text-wrap:balance}
@@ -135,6 +138,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <button class="pill" id="btnMusic" type="button" aria-pressed="true">Music</button>
     <button class="pill" id="btnNight" type="button" aria-pressed="false">Night</button>
     <button class="pill play" id="btnSandbox" type="button">Sandbox</button>
+    <button class="pill help" id="btnHelp" type="button" aria-label="Credits">?</button>
   </div>
   <div class="side">
     <button class="pill boom sand" id="btnPlay" type="button">Play game</button>
@@ -172,6 +176,16 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <p class="note" id="overNote"></p>
     <button class="pill boom" id="btnAgain" type="button">Try again</button>
     <button class="linkbtn" id="btnAlt" type="button" hidden>Back to level 1</button>
+  </div>
+</div>
+
+<div class="over" id="credits" role="dialog" aria-labelledby="creditsT" hidden>
+  <div>
+    <h2 id="creditsT">Wobbledly</h2>
+    <p class="cred">Brought to you by <a href="https://stooplight.com" target="_blank" rel="noopener">stooplight.com</a></p>
+    <p class="cred">Vibe coded with Claude</p>
+    <p class="note"><a href="https://github.com/troikkonen/wobbledly" target="_blank" rel="noopener">Open source on GitHub</a></p>
+    <button class="pill" id="btnCloseHelp" type="button">Close</button>
   </div>
 </div>
 
@@ -1454,6 +1468,8 @@ el('btnAgain').addEventListener('click',()=>{unlockAudio();
   else if(game.level>=LEVELS.length-1)startLevel(0,0);
   else startLevel(game.level+1,game.score);});
 el('btnAlt').addEventListener('click',()=>{unlockAudio();startLevel(0,0);});
+el('btnHelp').addEventListener('click',()=>{const c=el('credits');c.hidden=!c.hidden;});
+el('btnCloseHelp').addEventListener('click',()=>{el('credits').hidden=true;});
 el('btnSound').addEventListener('click',e=>{soundOn=!soundOn;e.currentTarget.setAttribute('aria-pressed',soundOn);try{localStorage.setItem('wobbledly-sound',soundOn?'1':'0');}catch(x){}if(soundOn)unlockAudio();});
 el('btnMusic').addEventListener('click',e=>{music.on=!music.on;e.currentTarget.setAttribute('aria-pressed',music.on);try{localStorage.setItem('wobbledly-music',music.on?'1':'0');}catch(x){}
   if(music.on)unlockAudio();else musicStop();});

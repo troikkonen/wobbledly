@@ -39,4 +39,4 @@ npx serve .
 
 MIT. See [LICENSE](LICENSE).
 
-Built in conversation with Claude.
+Brought to you by [Stooplight](https://stooplight.com). Vibe coded with Claude.
