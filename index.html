@@ -77,6 +77,15 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .over .pill{height:40px;padding:0 20px;border-radius:20px;font-size:15px}
 @media (prefers-reduced-motion:reduce){#danger.hot{animation:none}.pop{animation-duration:.5s}}
 .brand h1{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:.2px;line-height:1.05}
+.brand h1 button{font:inherit;letter-spacing:inherit;display:inline-flex;align-items:center;gap:6px;pointer-events:auto;border-radius:8px}
+:root:not(.game) .brand h1 button{pointer-events:none}
+.caret{font-size:13px;color:var(--muted);transform:translateY(1px)}
+#confetti{pointer-events:none;touch-action:auto}
+.lvgrid{display:grid;grid-template-columns:repeat(4,56px);gap:8px}
+.lv{position:relative;height:66px;border-radius:14px;border:1px solid var(--line);background:rgba(127,150,150,.12);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-family:var(--font-display);font-weight:600;font-size:17px}
+.lv i{display:block;width:20px;height:20px;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.lv.cur{border:2px solid var(--accent)}
+.lv.done::after{content:'\2713';position:absolute;top:3px;right:6px;font-size:12px;color:var(--accent)}
 .brand p{margin:0;font-size:12px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
 .acts{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start;pointer-events:auto;order:3;flex-basis:100%}
 .pill{height:32px;padding:0 9px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .12s ease,background .2s}
@@ -125,7 +134,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 <header class="top">
   <div class="brand">
-    <h1 id="title">Wobbledly</h1>
+    <h1><button id="btnLevel" type="button" aria-label="Choose a level"><span id="title">Wobbledly</span><span class="caret play" aria-hidden="true">&#9662;</span></button></h1>
     <p id="count" class="sand">0 of 40 blobs</p>
     <p class="play scoreline"><b id="score">0</b> pts · best <span id="best">0</span></p>
   </div>
@@ -175,7 +184,17 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <p><b id="overScore">0</b> pts · best <span id="overBest">0</span></p>
     <p class="note" id="overNote"></p>
     <button class="pill boom" id="btnAgain" type="button">Try again</button>
-    <button class="linkbtn" id="btnAlt" type="button" hidden>Back to level 1</button>
+    <button class="linkbtn" id="btnAlt" type="button" hidden>Choose a level</button>
+  </div>
+</div>
+
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<div class="over" id="levels" role="dialog" aria-labelledby="levelsT" hidden>
+  <div>
+    <h2 id="levelsT">Choose a level</h2>
+    <div class="lvgrid" id="lvGrid"></div>
+    <button class="pill" id="btnCloseLevels" type="button">Close</button>
   </div>
 </div>
 
@@ -1038,7 +1057,8 @@ const grabs=[null,null,null,null];
 const state={mat:0,grav:0,slow:false,night:false,boomT:0,time:0,nightK:0};
 const game={on:false,over:false,won:false,dialog:'',level:0,target:3,hw:2.4,room:5,hd:1.3,score:0,levelScore:0,best:0,held:-1,heldTier:0,nextTier:0,nextAt:0,
   dropCount:0,aimX:0,aiming:false,pending:false,pendingT:0,dangerT:0,lastT:0,boomPos:null};
-try{game.best=+localStorage.getItem('wobble-lab-best')||0;game.level=+localStorage.getItem('wobble-lab-level')||0;}catch(e){}
+game.cleared=0;game.party=null;
+try{game.best=+localStorage.getItem('wobble-lab-best')||0;game.level=+localStorage.getItem('wobble-lab-level')||0;game.cleared=+localStorage.getItem('wobble-lab-cleared')||0;}catch(e){}
 const GRAV=[{label:'down',g:-20},{label:'moon',g:-3.5},{label:'zero',g:0},{label:'up',g:20}];
 const countEl=document.getElementById('count');
 function updateCount(){const n=slots.filter(Boolean).length;countEl.textContent=n+' of '+MAXB+' blobs';highest=0;for(let i=0;i<MAXB;i++)if(slots[i])highest=i+1;}
@@ -1277,6 +1297,7 @@ function updateHud(){
   setSwatch(el('nextSw'),game.nextTier,game.nextTier===DUD?22:Math.round(16+game.nextTier*4));
   setSwatch(el('goalSw'),game.target,26);
   ladderEls.forEach((d,i)=>{d.classList.toggle('off',i>game.target);d.classList.toggle('goal',i===game.target);});
+  renderLevels();
   el('gameHint').textContent=L.dud?'Grey duds never merge. A merge right next to one clears it.':'Drag to aim, let go to drop. Merge up to the ringed blob.';
 }
 function bumpBest(){if(game.score>game.best){game.best=game.score;try{localStorage.setItem('wobble-lab-best',game.best);}catch(e){}}}
@@ -1342,12 +1363,82 @@ function tone(f,at,len,vol){const t=actx.currentTime+at,o=actx.createOscillator(
   o.connect(g);g.connect(actx.destination);o.start(t);o.stop(t+len+0.02);}
 function blip(tier){if(!soundOn||!actx||actx.state!=='running')return;try{tone(560*Math.pow(0.87,tier),0,0.24,0.2);}catch(e){}}
 function fanfare(){if(!soundOn||!actx||actx.state!=='running')return;try{[392,494,587,784].forEach((f,i)=>tone(f,i*0.11,0.3,0.16));}catch(e){}}
+// The big finish: three rising brass calls, a drum roll, then a full chord with cymbals and a two-hit ending.
+let longNoise=null;
+function brass(f,t,len,vol,out){
+  const g=actx.createGain(),lp=actx.createBiquadFilter();lp.type='lowpass';
+  lp.frequency.setValueAtTime(900,t);lp.frequency.linearRampToValueAtTime(2800,t+0.06);lp.frequency.setTargetAtTime(1500,t+0.1,0.3);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.025);g.gain.setValueAtTime(vol,t+Math.max(0.04,len-0.06));g.gain.exponentialRampToValueAtTime(0.0001,t+len+0.14);
+  for(const d of [-7,7]){const o=actx.createOscillator();o.type='sawtooth';o.frequency.value=f;o.detune.value=d;o.connect(lp);o.start(t);o.stop(t+len+0.18);}
+  lp.connect(g);g.connect(out);
+}
+function sineNote(f,t,len,vol,out){const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+len);o.connect(g);g.connect(out);o.start(t);o.stop(t+len+0.03);}
+function hiss(t,len,vol,hp,out){
+  if(!longNoise||longNoise.sampleRate!==actx.sampleRate){longNoise=actx.createBuffer(1,Math.floor(actx.sampleRate*2),actx.sampleRate);const d=longNoise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}
+  const n=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();n.buffer=longNoise;f.type='highpass';f.frequency.value=hp;
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+len);n.connect(f);f.connect(g);g.connect(out);n.start(t,Math.random()*0.4,len+0.05);
+}
+function victoryTheme(force){
+  if(!force&&((!soundOn&&!music.on)||!actx||actx.state!=='running'))return 0;
+  const b=60/140,t0=actx.currentTime+0.08;
+  try{
+    if(!force)musicStop();
+    const out=actx.createGain(),comp=actx.createDynamicsCompressor();out.gain.value=0.5;out.connect(comp);comp.connect(actx.destination);
+    const B=(m,at,len,v)=>brass(mtof(m),t0+at*b,len*b,v,out), S=(m,at,len,v)=>sineNote(mtof(m),t0+at*b,len*b,v,out);
+    const chord=(ms,at,len,v)=>ms.forEach(m=>B(m,at,len,v));
+    hiss(t0,1.2,0.22,5200,out);
+    [[67,72,76,79,48,[60,64,67]],[69,72,77,81,41,[60,65,69]],[71,74,79,83,43,[62,67,71]]].forEach((p,i)=>{const at=i*3;
+      B(p[0],at,.3,.15);B(p[1],at+.33,.3,.15);B(p[2],at+.67,.3,.15);B(p[3],at+1,1.7,.19);
+      S(p[4],at+1,1.9,.32);S(p[4]+12,at+1,1.6,.12);chord(p[5],at+1,1.7,.06);hiss(t0+(at+1)*b,0.12,0.16,1800,out);});
+    for(let k=0;k<12;k++)hiss(t0+(8+k/12)*b,0.07,0.05+k*0.014,1500,out);          // drum roll into the chord
+    chord([60,64,67,72,76],9,2.8,.065);B(84,9,2.8,.17);B(79,9,2.8,.1);S(36,9,3,.3);S(48,9,3,.2);hiss(t0+9*b,1.8,0.3,4800,out);
+    [84,88,91,96,100,103].forEach((m,i)=>S(m,9.4+i*0.25,1.2,.07));              // sparkle on top
+    chord([55,62,67,71,74],12,.45,.08);S(43,12,.5,.28);hiss(t0+12*b,0.15,0.2,1800,out);
+    chord([60,64,67,72,76,84],12.75,2.6,.075);B(96,12.75,2.6,.09);S(36,12.75,3,.32);S(48,12.75,3,.2);hiss(t0+12.75*b,2,0.32,4800,out);
+  }catch(e){}
+  const secs=16.2*b;
+  if(!force)setTimeout(()=>{if(music.on)musicStart();},secs*1000+300);
+  return secs;
+}
+const confCv=el('confetti'),confCx=confCv.getContext('2d');let confP=[],confRAF=0;
+function confetti(n){
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const w=confCv.width=window.innerWidth,h=confCv.height=window.innerHeight;
+  for(let i=0;i<n;i++)confP.push({x:w*(0.12+0.76*Math.random()),y:h*(0.3+0.1*Math.random()),vx:(Math.random()-.5)*w*1.1,vy:-h*(0.45+Math.random()*0.75),
+    r:Math.random()*6.28,vr:(Math.random()-.5)*14,s:6+Math.random()*7,c:TIERS[i%9].color,life:3.2+Math.random()*2.2});
+  if(confRAF)return;
+  let last=performance.now();
+  const step=now=>{
+    const dt=Math.min((now-last)/1000,0.05);last=now;
+    confCx.clearRect(0,0,confCv.width,confCv.height);
+    confP=confP.filter(p=>(p.life-=dt)>0&&p.y<confCv.height+30);
+    for(const p of confP){p.vy+=confCv.height*1.2*dt;p.vx*=0.985;p.vy*=0.992;p.x+=p.vx*dt;p.y+=p.vy*dt;p.r+=p.vr*dt;
+      confCx.save();confCx.translate(p.x,p.y);confCx.rotate(p.r);confCx.globalAlpha=Math.min(1,p.life);confCx.fillStyle=p.c;confCx.fillRect(-p.s/2,-p.s*0.3,p.s,p.s*0.6);confCx.restore();}
+    confRAF=confP.length?requestAnimationFrame(step):0;
+    if(!confRAF)confCx.clearRect(0,0,confCv.width,confCv.height);
+  };
+  confRAF=requestAnimationFrame(step);
+}
+function renderLevels(){
+  const G=el('lvGrid');
+  if(!G.children.length)LEVELS.forEach((L,i)=>{const bt=document.createElement('button');bt.type='button';bt.className='lv';bt.dataset.l=i;
+    bt.setAttribute('aria-label','Level '+(i+1));const n=document.createElement('span');n.textContent=i+1;const sw=document.createElement('i');sw.style.background=TIERS[L.target].css;bt.append(n,sw);G.appendChild(bt);});
+  [...G.children].forEach((bt,i)=>{bt.classList.toggle('cur',i===game.level);bt.classList.toggle('done',!!(game.cleared>>i&1));});
+}
+function partyTick(t){
+  const P=game.party;if(!P)return;
+  if(t>P.until){game.party=null;return;}
+  if(t>=P.next){P.next=t+0.2;const tier=Math.floor(Math.random()*6);spawnTier(tier,[(Math.random()*2-1)*(tank.hw-TIERS[tier].r-0.1),tank.H-0.5-TIERS[tier].r,0],{vel:[(Math.random()-.5)*3,-2,0]});}
+  if(t>=P.boom){P.boom=t+1.3;game.boomPos=[(Math.random()-.5)*tank.hw,0.4,0];state.boomT=0.1;}
+}
 function popAt(world,text){const p=project(world),d=document.createElement('span');d.className='pop';d.textContent=text;d.style.left=p[0]+'px';d.style.top=p[1]+'px';
   popsEl.appendChild(d);setTimeout(()=>d.remove(),950);}
 function startLevel(n,score){
   n=clamp(n|0,0,LEVELS.length-1);const L=LEVELS[n];
   Object.assign(game,{level:n,target:L.target,hw:L.hw,room:L.room,hd:TIERS[L.target].r+0.1,score,levelScore:score,over:false,won:false,dialog:'',
-    held:-1,aimX:0,aiming:false,pending:false,dangerT:0,dropCount:0,boomPos:null});
+    held:-1,aimX:0,aiming:false,pending:false,dangerT:0,dropCount:0,boomPos:null,party:null});
+  el('levels').hidden=true;
   try{localStorage.setItem('wobble-lab-level',n);}catch(e){}
   clearAll();state.boomT=0;resize(true);
   game.lastT=state.time;game.nextTier=pickNext();game.nextAt=state.time+0.3;
@@ -1365,7 +1456,7 @@ function showDialog(kind){
   else{const N=LEVELS[game.level+1],sw=document.createElement('i');sw.style.background=TIERS[N.target].css;
     note.append('Next goal ',sw,N.dud?' with duds in the way':N.hw>LEVELS[game.level].hw?' in a bigger tank':' with less room');}
   el('btnAgain').textContent=kind==='lost'?'Try again':last?'Play from level 1':'Next level';
-  el('btnAlt').hidden=!(kind==='lost'&&game.level>0);
+  el('btnAlt').hidden=!(kind==='lost'||last);
   game.dialog=kind;overEl.hidden=false;
 }
 function endGame(){game.over=true;game.aiming=false;showDialog('lost');}
@@ -1373,8 +1464,16 @@ function winLevel(mid){
   game.won=true;game.aiming=false;
   if(game.held>=0){removeBody(game.held);game.held=-1;}
   game.score+=100*(game.level+1);bumpBest();updateHud();
-  game.boomPos=mid;state.boomT=0.12;fanfare();
-  const lv=game.level;setTimeout(()=>{if(game.on&&game.won&&game.level===lv)showDialog('won');},1100);
+  game.cleared|=1<<game.level;try{localStorage.setItem('wobble-lab-cleared',game.cleared);}catch(e){}
+  game.boomPos=mid;state.boomT=0.12;
+  const lv=game.level,still=()=>game.on&&game.won&&game.level===lv;
+  if(lv<LEVELS.length-1){fanfare();confetti(70);setTimeout(()=>{if(still())showDialog('won');},1100);return;}
+  // last level: victory theme, confetti bursts, a rain of blobs, then the dialog
+  const secs=victoryTheme()||6.5,beat=60/140;
+  game.party={until:state.time+secs,next:state.time+0.5,boom:state.time+1.2};
+  confetti(130);
+  [3,6,9,12.75].forEach(at=>setTimeout(()=>{if(still())confetti(at>=9?170:90);},at*beat*1000));
+  setTimeout(()=>{if(still())showDialog('won');},(secs-0.6)*1000);
 }
 function drop(){if(game.held<0)return;slots[game.held].born=state.time;grabs[3]=null;game.held=-1;game.pending=false;game.nextAt=state.time+0.55;}
 function merge(i,j){
@@ -1396,6 +1495,7 @@ function merge(i,j){
 function gameTick(){
   if(!game.on)return;
   const t=state.time,dt=clamp(t-game.lastT,0,0.1);game.lastT=t;
+  if(game.won)partyTick(t);
   if(game.over||game.won)return;
   if(game.held<0&&t>=game.nextAt){
     const tier=game.nextTier,r=TIERS[tier].r;
@@ -1455,7 +1555,7 @@ function setMode(on){
   game.on=on;root.classList.toggle('game',on);
   clearAll();pointers.clear();
   state.grav=0;el('gravState').textContent=GRAV[0].label;state.slow=false;el('btnSlow').setAttribute('aria-pressed','false');state.boomT=0;
-  overEl.hidden=true;game.won=false;game.over=false;
+  overEl.hidden=true;el('levels').hidden=true;game.won=false;game.over=false;game.party=null;
   if(on){cam.yaw=0;cam.pitch=0.17;startLevel(game.level,0);}
   else{cam.yaw=0.3;cam.pitch=0.2;el('title').textContent='Wobbledly';resize(true);openSandbox();}
   updateOverlays();
@@ -1467,7 +1567,10 @@ el('btnAgain').addEventListener('click',()=>{unlockAudio();
   if(game.dialog==='lost')startLevel(game.level,game.levelScore);
   else if(game.level>=LEVELS.length-1)startLevel(0,0);
   else startLevel(game.level+1,game.score);});
-el('btnAlt').addEventListener('click',()=>{unlockAudio();startLevel(0,0);});
+el('btnAlt').addEventListener('click',()=>{renderLevels();el('levels').hidden=false;});
+el('btnLevel').addEventListener('click',()=>{if(!game.on)return;renderLevels();el('levels').hidden=!el('levels').hidden;});
+el('btnCloseLevels').addEventListener('click',()=>{el('levels').hidden=true;});
+el('lvGrid').addEventListener('click',e=>{const bt=e.target.closest('.lv');if(!bt)return;unlockAudio();startLevel(+bt.dataset.l,0);});
 el('btnHelp').addEventListener('click',()=>{const c=el('credits');c.hidden=!c.hidden;});
 el('btnCloseHelp').addEventListener('click',()=>{el('credits').hidden=true;});
 el('btnSound').addEventListener('click',e=>{soundOn=!soundOn;e.currentTarget.setAttribute('aria-pressed',soundOn);try{localStorage.setItem('wobbledly-sound',soundOn?'1':'0');}catch(x){}if(soundOn)unlockAudio();});
@@ -1541,7 +1644,10 @@ function frame(now){
 setMode(true);   // open on the game; the sandbox is one tap away
 
 // debug hook: advance the simulation without drawing
-window.__wl={music,get actx(){return actx;},project,game,TIERS,LEVELS,setMode,spawnTier,startLevel,gameTick,async play(n){for(let i=0;i<n;i++){await this.advance(1);gameTick();}updateOverlays();},
+window.__wl={winLevel,confetti,get confettiCount(){return confP.length;},
+  async renderVictory(){const real=actx,off=new OfflineAudioContext(1,44100*9,44100);actx=off;longNoise=null;let secs;try{secs=victoryTheme(true);}finally{actx=real;longNoise=null;}
+    const d=(await off.startRendering()).getChannelData(0),out=[];for(let s=0;s<9;s++){let pk=0,sq=0;for(let i=s*44100;i<(s+1)*44100;i++){const v=Math.abs(d[i]);if(v>pk)pk=v;sq+=v*v;}out.push([+pk.toFixed(3),+Math.sqrt(sq/44100).toFixed(3)]);}return {secs,perSecond:out};},
+  music,get actx(){return actx;},project,game,TIERS,LEVELS,setMode,spawnTier,startLevel,gameTick,async play(n){for(let i=0;i<n;i++){await this.advance(1);gameTick();}updateOverlays();},
   get frames(){return frames;},get lost(){return lostMsg;},state,spawn,cam,bodiesCPU,slots,grabs,tank,
   async advance(n,sub=6,scale=1){for(let i=0;i<n;i++){const enc=device.createCommandEncoder();simulate(enc,sub,H_STEP*scale);if(state.boomT>0)state.boomT-=sub*H_STEP*scale;device.queue.submit([enc.finish()]);state.time+=sub*H_STEP*scale;}
     const enc=device.createCommandEncoder();enc.copyBufferToBuffer(bodyBuf,0,readBuf,0,MAXB*160);device.queue.submit([enc.finish()]);
