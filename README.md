@@ -12,6 +12,7 @@ A squishy merge game that runs in the browser on WebGPU.
 - Two blobs of the same size fuse into the next size up.
 - Each level has a goal blob. Make it before the pile sits over the dashed line.
 - Later levels give you less room and add grey duds, which never merge and only clear when a merge happens right beside them.
+- Levels 9 to 16 each add a twist: a peg that splits the tank, a bumper sweeping the drop zone, a limit of 33 drops, two goal blobs that must stay apart, moon gravity, shifting wind, and quakes that shake the pile.
 - **Sandbox** switches to free play: six materials, five shapes, gravity flips, slow motion and a Boom button.
 
 ## Requirements

@@ -1055,8 +1055,9 @@ const slots=new Array(MAXB).fill(null); let order=[]; let highest=0;
 const bodiesCPU=new Float32Array(MAXB*40); let rbBusy=false;
 const grabs=[null,null,null,null];
 const state={mat:0,grav:0,slow:false,night:false,boomT:0,time:0,nightK:0};
-const game={on:false,over:false,won:false,dialog:'',level:0,target:3,hw:2.4,room:5,hd:1.3,score:0,levelScore:0,best:0,held:-1,heldTier:0,nextTier:0,nextAt:0,
-  dropCount:0,aimX:0,aiming:false,pending:false,pendingT:0,dangerT:0,lastT:0,boomPos:null};
+const game={on:false,over:false,won:false,dialog:'',level:0,target:3,hw:2.4,room:5,head:2.2,hd:1.3,score:0,levelScore:0,best:0,held:-1,heldTier:0,nextTier:0,nextAt:0,
+  dropCount:0,aimX:0,aiming:false,pending:false,pendingT:0,dangerT:0,lastT:0,boomPos:null,
+  gx:0,gy:0,pegs:[],bumper:-1,quakeAt:0,lastDropT:0,lastMergeT:0};
 game.cleared=0;game.party=null;
 try{game.best=+localStorage.getItem('wobble-lab-best')||0;game.level=+localStorage.getItem('wobble-lab-level')||0;game.cleared=+localStorage.getItem('wobble-lab-cleared')||0;}catch(e){}
 const GRAV=[{label:'down',g:-20},{label:'moon',g:-3.5},{label:'zero',g:0},{label:'up',g:20}];
@@ -1131,7 +1132,7 @@ function resize(force){
   const topPx=document.querySelector('.top').getBoundingClientRect().bottom+10;
   const trayPx=document.querySelector('.tray').getBoundingClientRect().top-18;
   const yTop=clamp(1-2*topPx/ch,0.2,0.95), yBot=clamp(2*trayPx/ch-1,0.15,0.95);
-  const needH=game.on?game.room+2.2:5.6;   // game levels size the tank; the camera zooms to fit it
+  const needH=game.on?game.room+game.head:5.6;   // game levels size the tank; the camera zooms to fit it
   const distW=((game.on?game.hw:2.4)+0.45)/(th*cam.aspect)+tank.hd;
   const distH=(needH+0.8*yBot*tank.hd*th)/(th*(0.8*yBot+0.93*yTop));
   cam.dist=Math.max(distW,distH);
@@ -1177,7 +1178,7 @@ function updateGlobals(){
 }
 function updateSim(dt){
   const f=new Float32Array(48);
-  f.set([0,GRAV[state.grav].g,0,dt],0);
+  f.set(game.on?[game.gx,game.gy||GRAV[0].g,0,dt]:[0,GRAV[state.grav].g,0,dt],0);
   f.set([tank.hw,tank.H,tank.hd,highest],4);
   const up=GRAV[state.grav].g>0;
   const bp=game.on&&game.boomPos?game.boomPos:[0,up?tank.H-0.3:0.3,0];
@@ -1263,7 +1264,23 @@ const DUD=9, TOP=8;
 // goal tier, tank half width, room under the line, and how often a dud turns up
 const LEVELS=[
   {target:3,hw:1.2,room:1.7},{target:4,hw:1.4,room:1.9},{target:5,hw:1.6,room:2.6},{target:6,hw:1.9,room:3.0},
-  {target:7,hw:2.2,room:3.7},{target:8,hw:2.4,room:4.3},{target:8,hw:2.4,room:4.1,dud:7},{target:8,hw:2.3,room:3.9,dud:5}];
+  {target:7,hw:2.2,room:3.7},{target:8,hw:2.4,room:4.3},{target:8,hw:2.4,room:4.1,dud:7},{target:8,hw:2.3,room:3.9,dud:5},
+  // twist levels: pegs are [x as a share of the half width, height, radius]; the bumper sweeps the drop zone just above the line
+  {target:6,hw:1.9,room:3.0,pegs:[[0,1.15,0.34]],note:' with a peg in the middle',
+    hint:'A steel peg splits the tank. Blobs roll off it either way.'},
+  {target:6,hw:1.9,room:3.0,head:3.0,bumper:{dy:0.75,r:0.34,amp:0.65,per:5},note:' with a bumper in the way',
+    hint:'A bumper sweeps over the line. Time your drops.'},
+  {target:6,hw:1.9,room:3.0,drops:33,note:' in 33 drops'},
+  {target:6,hw:2.1,room:3.2,need:2,note:' twice, kept apart',
+    hint:'Make two ringed blobs. If they touch, they fuse.'},
+  {target:7,hw:2.2,room:3.7,grav:-7,note:' on the moon',
+    hint:'Moon gravity. Blobs float down and bounce high.'},
+  {target:7,hw:2.2,room:3.9,wind:4,windPer:12,note:' in the wind',
+    hint:'The wind keeps turning. The aim line leans with it.'},
+  {target:7,hw:2.2,room:3.4,quake:8,dud:8,note:' with quakes',
+    hint:'Quakes shake the pile every few seconds. Grey duds clear beside a merge.'},
+  {target:8,hw:2.4,room:4.2,quake:10,dud:7,note:' with quakes and duds',
+    hint:'The last one. Quakes, duds, and the gold blob.'}];
 TIERS.forEach((T,i)=>{const c=T.color;
   T.css=i===5?'repeating-linear-gradient(115deg,#12a89a 0 22%,#f6f1e4 22% 38%)'
     :i===6?'radial-gradient(circle at 34% 28%,#fff 0 12%,#ffe3f1 30%,#d6ecff 58%,#e8dcff 78%,#bfc7d6 100%)'
@@ -1295,11 +1312,16 @@ function updateHud(){
   el('title').textContent=game.on?'Level '+(game.level+1):'Wobbledly';
   el('score').textContent=game.score;el('best').textContent=game.best;
   setSwatch(el('nextSw'),game.nextTier,game.nextTier===DUD?22:Math.round(16+game.nextTier*4));
+  el('nextSw').style.opacity=L.drops&&game.dropCount>=L.drops?'0.2':'';   // nothing more is coming
   setSwatch(el('goalSw'),game.target,26);
+  el('goalSw').previousElementSibling.textContent=L.need>1?'Goal ×'+L.need:'Goal';
   ladderEls.forEach((d,i)=>{d.classList.toggle('off',i>game.target);d.classList.toggle('goal',i===game.target);});
   renderLevels();
-  el('gameHint').textContent=L.dud?'Grey duds never merge. A merge right next to one clears it.':'Drag to aim, let go to drop. Merge up to the ringed blob.';
+  el('gameHint').textContent=L.drops?'Make the ringed blob in '+L.drops+' drops. '+dropsLeft()+' left.'
+    :L.hint?L.hint:L.dud?'Grey duds never merge. A merge right next to one clears it.':'Drag to aim, let go to drop. Merge up to the ringed blob.';
 }
+// drops still to come in a drop-limit level, counting the one in hand
+function dropsLeft(){const L=LEVELS[game.level];return L.drops?Math.max(0,L.drops-game.dropCount+(game.held>=0?1:0)):-1;}
 function bumpBest(){if(game.score>game.best){game.best=game.score;try{localStorage.setItem('wobble-lab-best',game.best);}catch(e){}}}
 let actx=null,soundOn=true;
 const music={on:true,timer:null,gain:null,step:0,next:0};
@@ -1336,7 +1358,7 @@ function musicStep(i,t,dur){
 }
 function musicTick(){
   if(!actx||actx.state!=='running'||!music.gain)return;
-  const dur=30/(94+(game.on?game.level*3:0));   // eighth notes; the tempo creeps up with the level
+  const dur=30/(94+(game.on?Math.min(game.level,10)*3:0));   // eighth notes; the tempo creeps up with the level, then holds
   if(music.next<actx.currentTime)music.next=actx.currentTime+0.05;
   while(music.next<actx.currentTime+0.3){
     try{musicStep(music.step,music.next+((music.step&1)?dur*0.14:0),dur);}catch(e){}
@@ -1363,6 +1385,13 @@ function tone(f,at,len,vol){const t=actx.currentTime+at,o=actx.createOscillator(
   o.connect(g);g.connect(actx.destination);o.start(t);o.stop(t+len+0.02);}
 function blip(tier){if(!soundOn||!actx||actx.state!=='running')return;try{tone(560*Math.pow(0.87,tier),0,0.24,0.2);}catch(e){}}
 function fanfare(){if(!soundOn||!actx||actx.state!=='running')return;try{[392,494,587,784].forEach((f,i)=>tone(f,i*0.11,0.3,0.16));}catch(e){}}
+function fanfareSmall(){if(!soundOn||!actx||actx.state!=='running')return;try{[392,587].forEach((f,i)=>tone(f,i*0.11,0.26,0.14));}catch(e){}}
+// A quake is a short shove up and out from a spot on the floor, with a low rumble.
+function quake(){
+  game.boomPos=[(Math.random()*2-1)*game.hw*0.5,0.3,0];state.boomT=0.06;
+  popAt([0,game.room+0.5,0],'Quake!');
+  if(soundOn&&actx&&actx.state==='running'){try{tone(52,0,0.7,0.32);tone(78,0.06,0.45,0.18);tone(46,0.18,0.6,0.22);}catch(e){}}
+}
 // The big finish: three rising brass calls, a drum roll, then a full chord with cymbals and a two-hit ending.
 let longNoise=null;
 function brass(f,t,len,vol,out){
@@ -1434,32 +1463,40 @@ function partyTick(t){
 }
 function popAt(world,text){const p=project(world),d=document.createElement('span');d.className='pop';d.textContent=text;d.style.left=p[0]+'px';d.style.top=p[1]+'px';
   popsEl.appendChild(d);setTimeout(()=>d.remove(),950);}
+// Pegs and the bumper are heavy chrome balls held in place by the same spring that holds the blob in hand (grab slots 0 to 2; slot 3 is the hand).
+function spawnFixed(k,pos,r,color){const s=r/0.62;
+  const slot=spawn(0,2,{scale:s,pos,vel:[0,0,0],color,noEvict:true,phys:{omega:240,beta:.15,damp:8,fric:.35,smooth:.3,dens:40}});
+  if(slot>=0)grabs[k]={body:slot,local:[0,0,0],target:pos.slice(),radius:50};
+  return slot;}
 function startLevel(n,score){
   n=clamp(n|0,0,LEVELS.length-1);const L=LEVELS[n];
-  Object.assign(game,{level:n,target:L.target,hw:L.hw,room:L.room,hd:TIERS[L.target].r+0.1,score,levelScore:score,over:false,won:false,dialog:'',
-    held:-1,aimX:0,aiming:false,pending:false,dangerT:0,dropCount:0,boomPos:null,party:null});
+  Object.assign(game,{level:n,target:L.target,hw:L.hw,room:L.room,head:L.head||2.2,hd:TIERS[L.target].r+0.1,score,levelScore:score,over:false,won:false,dialog:'',
+    held:-1,aimX:0,aiming:false,pending:false,dangerT:0,dropCount:0,boomPos:null,party:null,
+    gx:0,gy:L.grav||0,pegs:[],bumper:-1,quakeAt:state.time+(L.quake||0),lastDropT:state.time,lastMergeT:state.time});
   el('levels').hidden=true;
   try{localStorage.setItem('wobble-lab-level',n);}catch(e){}
   clearAll();state.boomT=0;resize(true);
   game.lastT=state.time;game.nextTier=pickNext();game.nextAt=state.time+0.3;
   overEl.hidden=true;dangerEl.classList.remove('hot');
+  (L.pegs||[]).forEach(([x,y,r])=>{const k=game.pegs.length;if(k<3)game.pegs.push(spawnFixed(k,[x*L.hw,y,0],r,'#dfe4ea'));});
+  if(L.bumper&&game.pegs.length<3)game.bumper=spawnFixed(game.pegs.length,[0,L.room+L.bumper.dy,0],L.bumper.r,'#ff6fa8');
   spawnTier(0,[-L.hw*0.45,0.6,0]);spawnTier(1,[L.hw*0.45,0.7,0]);
   updateHud();updateOverlays();
 }
-function showDialog(kind){
+function showDialog(kind,why){
   const last=game.level>=LEVELS.length-1,note=el('overNote');
-  el('overT').textContent=kind==='lost'?'The tank overflowed':last?'You cleared every level':'Level '+(game.level+1)+' cleared';
+  el('overT').textContent=kind==='lost'?(why==='drops'?'Out of drops':'The tank overflowed'):last?'You cleared every level':'Level '+(game.level+1)+' cleared';
   el('overScore').textContent=game.score;el('overBest').textContent=game.best;
   note.textContent='';
-  if(kind==='lost')note.textContent='The pile sat over the line too long.';
+  if(kind==='lost')note.textContent=why==='drops'?'The goal has to come before the last drop settles.':'The pile sat over the line too long.';
   else if(last)note.textContent='All '+LEVELS.length+' levels done.';
   else{const N=LEVELS[game.level+1],sw=document.createElement('i');sw.style.background=TIERS[N.target].css;
-    note.append('Next goal ',sw,N.dud?' with duds in the way':N.hw>LEVELS[game.level].hw?' in a bigger tank':' with less room');}
+    note.append('Next goal ',sw,N.note||(N.dud?' with duds in the way':N.hw>LEVELS[game.level].hw?' in a bigger tank':' with less room'));}
   el('btnAgain').textContent=kind==='lost'?'Try again':last?'Play from level 1':'Next level';
   el('btnAlt').hidden=!(kind==='lost'||last);
   game.dialog=kind;overEl.hidden=false;
 }
-function endGame(){game.over=true;game.aiming=false;showDialog('lost');}
+function endGame(why){game.over=true;game.aiming=false;showDialog('lost',why);}
 function winLevel(mid){
   game.won=true;game.aiming=false;
   if(game.held>=0){removeBody(game.held);game.held=-1;}
@@ -1475,7 +1512,8 @@ function winLevel(mid){
   [3,6,9,12.75].forEach(at=>setTimeout(()=>{if(still())confetti(at>=9?170:90);},at*beat*1000));
   setTimeout(()=>{if(still())showDialog('won');},(secs-0.6)*1000);
 }
-function drop(){if(game.held<0)return;slots[game.held].born=state.time;grabs[3]=null;game.held=-1;game.pending=false;game.nextAt=state.time+0.55;}
+function drop(){if(game.held<0)return;slots[game.held].born=state.time;grabs[3]=null;game.held=-1;game.pending=false;game.nextAt=state.time+0.55;game.lastDropT=state.time;
+  if(LEVELS[game.level].drops)updateHud();}
 function merge(i,j){
   const tier=slots[i].tier,oi=i*40,oj=j*40;
   const mid=[0,1,2].map(k=>(bodiesCPU[oi+k]+bodiesCPU[oj+k])/2),vel=[0,1,2].map(k=>(bodiesCPU[oi+4+k]+bodiesCPU[oj+4+k])/2||0);
@@ -1488,16 +1526,24 @@ function merge(i,j){
     const b=slots[k];if(!b||b.tier!==DUD||k===game.held)continue;const o=k*40;
     if(Math.hypot(bodiesCPU[o]-mid[0],bodiesCPU[o+1]-mid[1],bodiesCPU[o+2]-mid[2])<(rn+TIERS[DUD].r)*1.15){removeBody(k);pts+=10;}
   }
-  game.score+=pts;bumpBest();
+  game.score+=pts;bumpBest();game.lastMergeT=state.time;
   popAt(mid,'+'+pts);blip(tier);updateHud();
-  if(made===game.target)winLevel(mid);
+  if(made===game.target){const need=LEVELS[game.level].need||1,have=slots.filter(b=>b&&b.tier===game.target).length;
+    if(have>=need)winLevel(mid);else{setTimeout(()=>{if(game.on&&!game.won&&!game.over)popAt([mid[0],mid[1]+0.6,mid[2]],have+' of '+need);},450);fanfareSmall();}}
 }
 function gameTick(){
   if(!game.on)return;
   const t=state.time,dt=clamp(t-game.lastT,0,0.1);game.lastT=t;
   if(game.won)partyTick(t);
+  const L=LEVELS[game.level];
+  if(!game.over){   // the bumper keeps sweeping and the wind keeps turning through the win
+    if(L.bumper&&game.bumper>=0&&grabs[game.pegs.length])grabs[game.pegs.length].target=[L.bumper.amp*L.hw*Math.sin(2*Math.PI*t/L.bumper.per),L.room+L.bumper.dy,0];
+    game.gx=L.wind?L.wind*Math.sin(2*Math.PI*t/L.windPer):0;
+  }
   if(game.over||game.won)return;
-  if(game.held<0&&t>=game.nextAt){
+  if(L.quake&&t>=game.quakeAt){game.quakeAt=t+L.quake;quake();}
+  if(L.drops&&game.held<0&&game.dropCount>=L.drops&&t-Math.max(game.lastDropT,game.lastMergeT)>3){endGame('drops');return;}
+  if(game.held<0&&t>=game.nextAt&&!(L.drops&&game.dropCount>=L.drops)){
     const tier=game.nextTier,r=TIERS[tier].r;
     game.aimX=clamp(game.aimX,-tank.hw+r+0.05,tank.hw-r-0.05);
     const slot=spawnTier(tier,[game.aimX,holdY(tier),0]);
@@ -1540,7 +1586,8 @@ function updateOverlays(){
   if(!game.on)return;
   const ly=lineY();setLine(dangerEl,project([-tank.hw,ly,tank.hd]),project([tank.hw,ly,tank.hd]));
   const show=game.held>=0&&!game.over&&!game.won;aimEl.style.opacity=show?'':'0';
-  if(show)setLine(aimEl,project([game.aimX,holdY(game.heldTier)-TIERS[game.heldTier].r,0]),project([game.aimX,0,0]));
+  if(show){const y0=holdY(game.heldTier)-TIERS[game.heldTier].r,lean=game.gx/Math.abs(game.gy||GRAV[0].g);
+    setLine(aimEl,project([game.aimX,y0,0]),project([clamp(game.aimX+lean*y0,-tank.hw,tank.hw),0,0]));}
 }
 function aimFrom(ev){const rd=rayFrom(ev);if(Math.abs(rd[2])<1e-4)return;const t=-cam.eye[2]/rd[2];game.aimX=cam.eye[0]+rd[0]*t;}
 function gameDown(ev){unlockAudio();if(game.over||game.won)return;game.aiming=true;aimFrom(ev);}
